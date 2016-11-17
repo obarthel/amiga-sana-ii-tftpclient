@@ -1,0 +1,150 @@
+/*
+ * :ts=4
+ *
+ * TFTP client program for the Amiga, using only the SANA-II network
+ * device driver API, and no TCP/IP stack
+ *
+ * The "trivial file transfer protocol" is anything but trivial
+ * to implement...
+ *
+ * Copyright © 2016 by Olaf Barthel <obarthel at gmx dot net>
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE. MY CAPS LOCK KEY SEEMS TO BE STUCK.
+ */
+
+/****************************************************************************/
+
+#define __USE_INLINE__
+#include <proto/exec.h>
+
+/****************************************************************************/
+
+#include "timer.h"
+
+#include "macros.h"
+
+/****************************************************************************/
+
+/* Variables for use with the poll timer, which triggers retransmission
+ * of messages and acknowledgements.
+ */
+struct MsgPort *		time_port;
+struct timerequest *	time_request;
+BOOL					time_in_use;
+
+/****************************************************************************/
+
+/* Stop the interval timer, if it's currently busy. This function is
+ * safe to call even if it is not currently busy, or the interval timer
+ * has never been initialized.
+ */
+void
+stop_time(void)
+{
+	if(time_in_use)
+	{
+		if(CheckIO((struct IORequest *)time_request) == BUSY)
+			AbortIO((struct IORequest *)time_request);
+
+		WaitIO((struct IORequest *)time_request);
+
+		time_in_use = FALSE;
+	}
+}
+
+/****************************************************************************/
+
+/* Start the interval timer so that it expires after a given
+ * number of seconds. This function is safe to call if the
+ * interval timer is currently still ticking.
+ */
+void
+start_time(ULONG seconds)
+{
+	stop_time();
+
+	time_request->tr_node.io_Command	= TR_ADDREQUEST;
+	time_request->tr_time.tv_secs		= seconds;
+	time_request->tr_time.tv_micro		= 0;
+
+	SetSignal(0, (1UL << time_port->mp_SigBit));
+
+	SendIO((struct IORequest *)time_request);
+
+	time_in_use = TRUE;
+}
+
+/****************************************************************************/
+
+/* This initializes the interval timer. */
+int
+timer_setup(void)
+{
+	int result = FAILURE;
+
+	time_port = CreateMsgPort();
+	if(time_port == NULL)
+		goto out;
+
+	time_request = (struct timerequest *)CreateIORequest(time_port, sizeof(*time_request));
+	if(time_request == NULL)
+		goto out;
+
+	if(OpenDevice(TIMERNAME,UNIT_VBLANK,(struct IORequest *)time_request,0) != OK)
+		goto out;
+
+	result = OK;
+
+ out:
+
+	return(result);
+}
+
+/****************************************************************************/
+
+/* Clean up after the interval timer. */
+void
+timer_cleanup(void)
+{
+	if(time_request != NULL)
+	{
+		stop_time();
+
+		if(time_request->tr_node.io_Device != NULL)
+			CloseDevice((struct IORequest *)time_request);
+
+		DeleteIORequest((struct IORequest *)time_request);
+		time_request = NULL;
+	}
+
+	if(time_port != NULL)
+	{
+		DeleteMsgPort(time_port);
+		time_port = NULL;
+	}
+}

@@ -1,0 +1,107 @@
+#
+# :ts=8
+#
+# TFTP client program for the Amiga, using only the SANA-II network
+# device driver API, and no TCP/IP stack
+#
+# The "trivial file transfer protocol" is anything but trivial
+# to implement...
+#
+# Copyright © 2016 by Olaf Barthel <obarthel at gmx dot net>
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in
+#    the documentation and/or other materials provided with the
+#    distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived
+#    from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE. MY CAPS LOCK KEY SEEMS TO BE STUCK.
+#
+
+.c.o:
+	@echo "Compiling $<"
+	@$(CC) -c $(CFLAGS) -o $*.o $<
+
+###############################################################################
+
+NAME = TFTPClient
+
+###########################################################################
+
+WARNINGS = \
+	-Wall -W -Wshadow -Wpointer-arith -Wsign-compare -Wmissing-prototypes \
+	-Wundef -Wbad-function-cast -Wmissing-declarations
+
+OPTIONS = -DNDEBUG -D__USE_OLD_TIMEVAL__
+#OPTIONS = -DDEBUG=1 -D__USE_OLD_TIMEVAL__
+OPTIMIZE = -O3
+DEBUG = -ggdb
+
+###########################################################################
+
+CFLAGS = -mcrt=clib2 -D__NO_NET_API $(WARNINGS) $(OPTIMIZE) $(DEBUG) $(OPTIONS) \
+         -I. -I/V/include -I/usr/local/amiga/ppc-amigaos/sys-include -Iinclude
+LFLAGS = -L.
+
+###############################################################################
+
+CC = ppc-amigaos-gcc
+
+###############################################################################
+
+OBJS = \
+	main.o error-codes.o network-io.o testing.o timer.o network-ip-udp.o \
+	network-arp.o network-tftp.o args.o
+
+###############################################################################
+
+LIBS = -lc -ldebug
+
+###############################################################################
+
+all: $(NAME)
+
+$(NAME): $(OBJS)
+	@echo "Linking $@"
+	@$(CC) -o $@.debug $(CFLAGS) $(LFLAGS) $(OBJS) $(LIBS) -Wl,--cref,-M,-Map=$@.map
+	ppc-amigaos-strip -R.comment -o $@ $@.debug
+
+###############################################################################
+
+main.o : main.c $(NAME)_rev.h macros.h network-io.h network-arp.h \
+	network-ip-udp.h network-tftp.h error-codes.h testing.h timer.h args.h
+
+error-codes.o : error-codes.c error-codes.h network-tftp.h macros.h 
+
+network-io.o : network-io.c network-io.h macros.h compiler.h args.h
+
+testing.o : testing.c testing.h
+
+timer.o: timer.c timer.h macros.h
+
+network-ip-udp.o : network-ip-udp.c network-ip-udp.h testing.h network-io.h
+
+network-arp.o : network-arp.c network-arp.h testing.h network-io.h
+
+network-tftp.o : network-tftp.c network-tftp.h network-ip-udp.h
+
+args.o : args.c args.h

@@ -95,6 +95,15 @@ const char VersionTag[] = VERSTAG " TESTING";
 
 /****************************************************************************/
 
+#if defined(__amigaos4__)
+
+struct UtilityIFace *	IUtility;
+struct Library *		UtilityBase;
+
+#endif /* __amigaos4__ */
+
+/****************************************************************************/
+
 /* This function stops all I/O operations and releases all the resources
  * allocated by the setup() function. It is safe to call even if setup()
  * was never called, or setup() was only partially successful, or if
@@ -105,6 +114,22 @@ cleanup(void)
 {
 	network_cleanup();
 	timer_cleanup();
+	
+	#if defined(__amigaos4__)
+	{
+		if(IUtility != NULL)
+		{
+			DropInterface((struct Interface *)IUtility);
+			IUtility = NULL;
+		}
+
+		if(UtilityBase != NULL)
+		{
+			CloseLibrary(UtilityBase);
+			UtilityBase = NULL;
+		}
+	}
+	#endif /* __amigaos4__ */
 }
 
 /****************************************************************************/
@@ -119,6 +144,21 @@ setup(const struct cmd_args * args)
 	int result = FAILURE;
 
 	atexit(cleanup);
+
+	#if defined(__amigaos4__)
+	{
+		UtilityBase = OpenLibrary("utility.library",37);
+		if(UtilityBase != NULL)
+		{
+			IUtility = (struct UtilityIFace *)GetInterface(UtilityBase, "main", 1, 0);
+			if(IUtility == NULL)
+			{
+				CloseLibrary(UtilityBase);
+				UtilityBase = NULL;
+			}
+		}
+	}
+	#endif /* __amigaos4__ */
 
 	if(timer_setup() != OK)
 	{
@@ -492,7 +532,7 @@ main(int argc,char ** argv)
 	 * uniquely identifies the TFTP session. This picks an "ephemeral"
 	 * port number, which should be in the range 49152..65535.
 	 */
-	if(UtilityBase->lib_Version >= 39)
+	if(UtilityBase != NULL && UtilityBase->lib_Version >= 39)
 	{
 		/* Really use a unique ID. */
 		client_udp_port_number = 49152 + (GetUniqueID() % 16384);

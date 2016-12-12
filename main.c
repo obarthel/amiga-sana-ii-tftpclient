@@ -109,7 +109,7 @@ struct Library *		UtilityBase;
  * was never called, or setup() was only partially successful, or if
  * cleanup() has already been called.
  */
-void
+static void
 cleanup(void)
 {
 	network_cleanup();
@@ -138,7 +138,7 @@ cleanup(void)
  * opening the network device driver, the timer, etc. Returns 0 on success,
  * and -1 on failure.
  */
-int
+static int
 setup(const struct cmd_args * args)
 {
 	int result = FAILURE;
@@ -351,7 +351,7 @@ main(int argc,char ** argv)
 	get_ipv4_address_and_path_from_name(args.Destination, &to_ipv4_address, &to_path);
 
 	if((*to_path) == '\0')
-		to_path = FilePart(from_path);
+		to_path = (STRPTR)FilePart(from_path);
 
 	if(to_ipv4_address == local_ipv4_address || to_ipv4_address == 0x7F000001)
 		to_ipv4_address = 0;

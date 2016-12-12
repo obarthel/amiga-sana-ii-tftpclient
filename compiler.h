@@ -43,38 +43,38 @@
 /****************************************************************************/
 
 #if defined(__SASC)
-#define ASM __asm
-#define REG(r,p) register __##r p
-#define INLINE __inline
-#define INTERRUPT __interrupt
-#define FAR __far
-#define STDARGS __stdargs
-#elif defined(__GNUC__)
-#ifndef ASM
-#define ASM
-#endif /* ASM */
-#ifndef REG
-#define REG(r,p) p __asm(#r)
-#endif /* REG */
-#ifndef INLINE
-#define INLINE __inline__
-#endif /* INLINE */
-#ifndef INTERRUPT
-#define INTERRUPT __attribute__((__interrupt__))
-#endif /* INTERRUPT */
-#ifndef FAR
-#define FAR
-#endif /* FAR */
-#ifndef STDARGS
-#define STDARGS __attribute__((__stkparm__))
-#endif /* STDARGS */
+	#define ASM __asm
+	#define REG(r,p) register __##r p
+	#define INLINE __inline
+	#define INTERRUPT __interrupt
+	#define FAR __far
+	#define STDARGS __stdargs
+#elif defined(__GNUC__) && defined(AMIGA)
+	#ifndef ASM
+	#define ASM
+	#endif /* ASM */
+	#ifndef REG
+	#define REG(r,p) p __asm(#r)
+	#endif /* REG */
+	#ifndef INLINE
+	#define INLINE __inline__
+	#endif /* INLINE */
+	#ifndef INTERRUPT
+	#define INTERRUPT __attribute__((__interrupt__))
+	#endif /* INTERRUPT */
+	#ifndef FAR
+	#define FAR
+	#endif /* FAR */
+	#ifndef STDARGS
+	#define STDARGS __attribute__((__stkparm__))
+	#endif /* STDARGS */
 #else
-#define ASM
-#define REG(x)
-#define INLINE
-#define INTERRUPT
-#define FAR
-#define STDARGS
+	#define ASM
+	#define REG(r, p) p
+	#define INLINE
+	#define INTERRUPT
+	#define FAR
+	#define STDARGS
 #endif /* __SASC */
 
 /****************************************************************************/

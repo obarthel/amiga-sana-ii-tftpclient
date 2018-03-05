@@ -87,7 +87,7 @@ send_tftp_error(int error_code,STRPTR message,int client_port_number,int server_
 
 /****************************************************************************/
 
-/* Send a message with a request for the remote TFTP server begin the data transmission.
+/* Send a message with a request for the remote TFTP server to begin the data transmission.
  * Note that the contents of the buffer pointed to by the tftp_packet parameter will be modified.
  */
 LONG

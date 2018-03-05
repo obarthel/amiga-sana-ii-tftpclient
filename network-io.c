@@ -98,8 +98,8 @@ ULONG remote_ipv4_address;
 
 /****************************************************************************/
 
-/* Start a SANA-II read request command, to picked up later when
- * completes execution.
+/* Start a SANA-II read request command, to be picked up later when
+ * it completes execution.
  */
 void
 send_net_io_read_request(struct NetIORequest * nior,UWORD type)
@@ -153,7 +153,7 @@ duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_p
 	/* Make sure that this is safe to use with CheckIO() and WaitIO(). */
 	nior->nior_IOS2.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
 
-	if(reply_port)
+	if(reply_port != NULL)
 		nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort = reply_port;
 
 	nior->nior_IsDuplicate = TRUE;
@@ -218,7 +218,7 @@ create_net_request(struct MsgPort * reply_port, ULONG buffer_size)
 }
 
 /* Abort a network I/O request currently being processed.
- * Once this function returns that I/O request is ready
+ * Once this function returns the I/O request is ready
  * to be reused.
  */
 static void
@@ -449,7 +449,7 @@ network_setup(const struct cmd_args * args)
 		TEXT value[16];
 		LONG number;
 
-		/* Percentage of packets which deliver received data which should be discard. */
+		/* Percentage of packets which deliver received data which should be discarded. */
 		if(GetVar("DROPRX",value,sizeof(value),0) > 0)
 		{
 			if(StrToLong(value,&number) > 0 && 0 <= number && number <= 100)
@@ -486,7 +486,7 @@ network_setup(const struct cmd_args * args)
 	if(net_read_port == NULL)
 	{
 		if(!args->Quiet)
-			Printf("%s: Could not create net read MsgPort.\n","TFTPClient");
+			Printf("%s: Could not create network read MsgPort.\n","TFTPClient");
 
 		goto out;
 	}
@@ -495,7 +495,7 @@ network_setup(const struct cmd_args * args)
 	if(net_control_port == NULL)
 	{
 		if(!args->Quiet)
-			Printf("%s: Could not create net write MsgPort.\n","TFTPClient");
+			Printf("%s: Could not create network write MsgPort.\n","TFTPClient");
 
 		goto out;
 	}
@@ -537,7 +537,7 @@ network_setup(const struct cmd_args * args)
 	control_request->nior_IOS2.ios2_WireError		= 0;
 
 	memset(&s2dq,0,sizeof(s2dq));
-	s2dq.SizeAvailable = sizeof(s2dq) - sizeof(s2dq.RawMTU); /* ZZZ keep A2065.device happy */
+	s2dq.SizeAvailable = sizeof(s2dq) - sizeof(s2dq.RawMTU); /* ZZZ keep a2065.device happy */
 
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)
@@ -579,7 +579,7 @@ network_setup(const struct cmd_args * args)
 		goto out;
 	}
 
-	/* The transmission buffer size should be as large as the device supports, and no smaller. */
+	/* The transmission buffer size should be as large as the device supports, and not smaller. */
 	if (buffer_size < s2dq.MTU || buffer_size > s2dq.MTU)
 		buffer_size = s2dq.MTU;
 
@@ -692,7 +692,7 @@ network_setup(const struct cmd_args * args)
 		goto out;
 	}
 
-	/* We set up four ARP read request and start them (asynchronously). */
+	/* We set up four ARP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 4 ; i++)
 	{
 		read_request = duplicate_net_request(control_request, net_read_port, buffer_size);
@@ -707,7 +707,7 @@ network_setup(const struct cmd_args * args)
 		send_net_io_read_request(read_request,ETHERTYPE_ARP);
 	}
 
-	/* We set up eight IP read request and start them (asynchronously). */
+	/* We set up eight IP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 8 ; i++)
 	{
 		read_request = duplicate_net_request(control_request, net_read_port, buffer_size);

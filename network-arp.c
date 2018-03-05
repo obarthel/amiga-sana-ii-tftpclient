@@ -125,7 +125,7 @@ send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_addres
 
 /* Broadcast an ARP request message, asking for the Ethernet address to be
  * reported which corresponds to the IPv4 address of the system which we want
- * to sent UDP datagrams to.
+ * to send UDP datagrams to.
  */
 LONG
 broadcast_arp_query(ULONG target_ipv4_address)
@@ -147,7 +147,7 @@ broadcast_arp_query(ULONG target_ipv4_address)
 	ahe->ahe_SenderProtocolAddress = local_ipv4_address;
 
 	/* We don't know the Ethernet address corresponding to the TFTP server
-	 * IPv4 address, so we will it with the Ethernet broadcast address.
+	 * IPv4 address, so we will send it with the Ethernet broadcast address.
 	 */
 	memset(ahe->ahe_TargetHardwareAddress,0xff,sizeof(ahe->ahe_TargetHardwareAddress));
 	ahe->ahe_TargetProtocolAddress = remote_ipv4_address;

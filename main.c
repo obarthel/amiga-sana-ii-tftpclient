@@ -303,7 +303,7 @@ main(int argc,char ** argv)
 
 	/* The local IP address should be given in one of the
 	 * standard IPv4 formats. Some minimal filtering of
-	 * unusable address is performed here, too.
+	 * unusable addresses is performed here, too.
 	 */
 	if(!inet_aton(args.LocalIPAddress,&local_ipv4_address) || local_ipv4_address == 0 || local_ipv4_address == 0xFFFFFFFFUL || local_ipv4_address == 0x7F000001)
 	{
@@ -645,7 +645,7 @@ main(int argc,char ** argv)
 								const struct tftphdr * tftp = (struct tftphdr *)&udp[1];
 								int length = udp->uh_ulen - sizeof(*udp);
 
-								/* Server responsed with an error? We print the error message and abort. */
+								/* Server responded with an error? We print the error message and abort. */
 								if (tftp->th_opcode == TFTP_PACKET_ERROR)
 								{
 									if(!args.Quiet)
@@ -664,7 +664,7 @@ main(int argc,char ** argv)
 										memmove(message_buffer,tftp->th_msg,length - offsetof(struct tftphdr, th_msg));
 										message_buffer[length - offsetof(struct tftphdr, th_msg)] = '\0';
 
-										Printf("%s: Server responsed with error '%s', \"%s\".\n","TFTPClient",error_text,message_buffer);
+										Printf("%s: Server responded with error '%s', \"%s\".\n","TFTPClient",error_text,message_buffer);
 									}
 
 									result = RETURN_ERROR;
@@ -898,7 +898,7 @@ main(int argc,char ** argv)
 												Printf("Ignoring receipt of acknowledgement for block #%ld.\n",tftp->th_block);
 										}
 									}
-									/* Could this be the response to block we just sent to the server? */
+									/* Could this be the response to the block we just sent to the server? */
 									else if (tftp_state == tftp_state_read_from_file)
 									{
 										/* Is this really the acknowledgement for the block just sent? */
@@ -946,8 +946,8 @@ main(int argc,char ** argv)
 											total_num_bytes_transferred += num_bytes_read;
 
 											/* Did we just read the last data to be transmitted?
-											 * We also check for block number overflow, which
-											 * limits the number of block we can safely transmit.
+											 * We also check for block number overflows, which
+											 * limits the number of blocks we can safely transmit.
 											 */
 											if(num_bytes_read < SEGSIZE || ((block_number + 1) & 0xffff) == 0)
 											{
@@ -986,7 +986,7 @@ main(int argc,char ** argv)
 								else
 								{
 									if(!args.Quiet)
-										Printf("%s: Received unsupported TFTP operation %ld - aborting.\n","TFTPClient",tftp->th_opcode);
+										Printf("%s: Received unsupported TFTP operation %ld -- aborting.\n","TFTPClient",tftp->th_opcode);
 
 									send_tftp_error(TFTP_ERROR_BADOP,"Huh?",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -1030,7 +1030,7 @@ main(int argc,char ** argv)
 					const struct ARPHeaderEthernet * ahe = read_request->nior_Buffer;
 
 					/* This should be an ARP packet for IPv4 addresses, with
-					 * matching hardware (6 bytes) and procotol (4 bytes)
+					 * matching hardware (6 bytes) and protocol (4 bytes)
 					 * addresses.
 					 */
 					if(read_request->nior_IOS2.ios2_DataLength >= sizeof(*ahe) &&
@@ -1039,7 +1039,7 @@ main(int argc,char ** argv)
 					   ahe->ahe_HardwareAddressLength == 6 &&
 					   ahe->ahe_ProtocolAddressLength == 4)
 					{
-						/* Is this is request to report the hardware address corresponding
+						/* Is this a request to report the hardware address corresponding
 						 * to this tftp client's IPv4 address?
 						 */
 						if (ahe->ahe_Operation == ARPOP_REQUEST)
@@ -1129,7 +1129,7 @@ main(int argc,char ** argv)
 				if(num_arp_resolution_attempts == 0)
 				{
 					if(args.Verbose)
-						Printf("No response to ARP query received - aborting.\n");
+						Printf("No response to ARP query received -- aborting.\n");
 
 					goto out;
 				}

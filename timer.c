@@ -60,7 +60,7 @@ BOOL					time_in_use;
 /****************************************************************************/
 
 /* Stop the interval timer, if it's currently busy. This function is
- * safe to call even if it is not currently busy, or the interval timer
+ * safe to call even if it is not currently busy, or if the interval timer
  * has never been initialized.
  */
 void

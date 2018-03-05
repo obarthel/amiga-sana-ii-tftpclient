@@ -370,7 +370,7 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 	udp->uh_sum = in_cksum(ip,sizeof(*ip) + udp_pseudo_header->uh_ulen);
 	
 	/*
-	 * Set up the IPv4 header its checksum.
+	 * Set up the IPv4 header and its checksum.
 	 */
 
 	len += sizeof(*ip);

@@ -52,7 +52,7 @@
 /****************************************************************************/
 
 /* Send a TFTP acknowledgement packet to the remote server. Note that the
- * contents of the buffer pointed to by the tftp_packet parameter will be modfied.
+ * contents of the buffer pointed to by the tftp_packet parameter will be modified.
  */
 LONG
 send_tftp_acknowledgement(int block_number,int client_port_number,int server_port_number,UBYTE * tftp_packet)
@@ -68,7 +68,7 @@ send_tftp_acknowledgement(int block_number,int client_port_number,int server_por
 /****************************************************************************/
 
 /* Send a TFTP error packet to the remote server. Note that the contents of the buffer
- * pointed to by the tftp_packet parameter will be modfied.
+ * pointed to by the tftp_packet parameter will be modified.
  */
 LONG
 send_tftp_error(int error_code,STRPTR message,int client_port_number,int server_port_number,UBYTE * tftp_packet)
@@ -88,7 +88,7 @@ send_tftp_error(int error_code,STRPTR message,int client_port_number,int server_
 /****************************************************************************/
 
 /* Send a message with a request for the remote TFTP server begin the data transmission.
- * Note that the contents of the buffer pointed to by the tftp_packet parameter will be modfied.
+ * Note that the contents of the buffer pointed to by the tftp_packet parameter will be modified.
  */
 LONG
 start_tftp(int operation,STRPTR file_name,int client_port_number,int server_port_number,UBYTE * tftp_packet)

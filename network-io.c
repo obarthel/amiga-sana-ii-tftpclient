@@ -132,7 +132,7 @@ link_to_net_request(const struct MinNode * mn)
 	return(result);
 }
 
-/* Make a copy of a network I/O request, subtituting the reply port if needed,
+/* Make a copy of a network I/O request, substituting the reply port if needed,
  * and allocating a new data buffer if desired.
  */
 static struct NetIORequest *

@@ -74,6 +74,7 @@
 
 /* This keeps track of all net I/O requests allocated. */
 static struct List net_io_list;
+BOOL net_io_list_initialized;
 
 /* Network read and write operations use different message ports. */
 static struct MsgPort * net_control_port;
@@ -132,90 +133,7 @@ link_to_net_request(const struct MinNode * mn)
 	return(result);
 }
 
-/* Make a copy of a network I/O request, substituting the reply port if needed,
- * and allocating a new data buffer if desired.
- */
-static struct NetIORequest *
-duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_port, ULONG buffer_size)
-{
-	struct NetIORequest * result = NULL;
-	struct NetIORequest * nior;
-
-	nior = (struct NetIORequest *)AllocVec(sizeof(*nior), MEMF_ANY|MEMF_PUBLIC|MEMF_CLEAR);
-	if(nior == NULL)
-		goto out;
-
-	/* Keep track of this network I/O request, making it easier to clean up later. */
-	AddTail(&net_io_list,(struct Node *)&nior->nior_Link);
-
-	memmove(nior, orig, sizeof(nior->nior_IOS2));
-
-	/* Make sure that this is safe to use with CheckIO() and WaitIO(). */
-	nior->nior_IOS2.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
-
-	if(reply_port != NULL)
-		nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort = reply_port;
-
-	nior->nior_IsDuplicate = TRUE;
-
-	if(buffer_size > 0)
-	{
-		nior->nior_Buffer = AllocVec(buffer_size, MEMF_ANY|MEMF_PUBLIC);
-		if(nior->nior_Buffer == NULL)
-			goto out;
-
-		nior->nior_BufferSize = buffer_size;
-
-		nior->nior_FreeBuffer = TRUE;
-	}
-
-	result = nior;
-
- out:
-
-	if(result == NULL)
-		FreeVec(nior);
-
-	return(result);
-}
-
-/* Allocate a network I/O request, using a specific reply port (mandatory),
- * and optionally allocate memory for a data buffer.
- */
-static struct NetIORequest *
-create_net_request(struct MsgPort * reply_port, ULONG buffer_size)
-{
-	struct NetIORequest * result = NULL;
-	struct NetIORequest * nior;
-
-	nior = (struct NetIORequest *)AllocVec(sizeof(*nior), MEMF_ANY|MEMF_PUBLIC|MEMF_CLEAR);
-	if(nior == NULL)
-		goto out;
-
-	/* Keep track of this network I/O request, making it easier to clean up later. */
-	AddTail(&net_io_list,(struct Node *)&nior->nior_Link);
-
-	nior->nior_IOS2.ios2_Req.io_Message.mn_Node.ln_Type	= NT_REPLYMSG;
-	nior->nior_IOS2.ios2_Req.io_Message.mn_Length		= sizeof(nior->nior_IOS2);
-	nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort	= reply_port;
-
-	if(buffer_size > 0)
-	{
-		nior->nior_Buffer = AllocVec(buffer_size, MEMF_ANY|MEMF_PUBLIC);
-		if(nior->nior_Buffer == NULL)
-			goto out;
-
-		nior->nior_BufferSize = buffer_size;
-
-		nior->nior_FreeBuffer = TRUE;
-	}
-
-	result = nior;
-
- out:
-
-	return(result);
-}
+/****************************************************************************/
 
 /* Abort a network I/O request currently being processed.
  * Once this function returns the I/O request is ready
@@ -255,11 +173,98 @@ delete_net_request(struct NetIORequest * nior)
 				CloseDevice((struct IORequest *)nior);
 		}
 
-		if(nior->nior_FreeBuffer && nior->nior_Buffer != NULL)
+		if(nior->nior_Buffer != NULL)
 			FreeVec(nior->nior_Buffer);
 
 		FreeVec(nior);
 	}
+}
+
+/* Make a copy of a network I/O request, substituting the reply port if needed,
+ * and allocating a new data buffer if desired.
+ */
+static struct NetIORequest *
+duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_port)
+{
+	struct NetIORequest * result = NULL;
+	struct NetIORequest * nior;
+
+	nior = (struct NetIORequest *)AllocVec(sizeof(*nior), MEMF_ANY|MEMF_PUBLIC|MEMF_CLEAR);
+	if(nior == NULL)
+		goto out;
+
+	/* Keep track of this network I/O request, making it easier to clean up later. */
+	AddTail(&net_io_list,(struct Node *)&nior->nior_Link);
+
+	/* Make a copy of the SANA-II I/O request, and nothing else. */
+	nior->nior_IOS2 = orig->nior_IOS2;
+
+	/* Make sure that this is safe to use with CheckIO() and WaitIO(). */
+	nior->nior_IOS2.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
+
+	/* Replace the reply port if needed. */
+	if(reply_port != NULL)
+		nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort = reply_port;
+
+	/* Remember not to close the device driver when this request is freed. */
+	nior->nior_IsDuplicate = TRUE;
+
+	/* We use the same buffer size as the request which this is
+	 * a duplicate of.
+	 */
+	nior->nior_BufferSize = orig->nior_BufferSize;
+
+	nior->nior_Buffer = AllocVec(nior->nior_BufferSize, MEMF_ANY|MEMF_PUBLIC);
+	if(nior->nior_Buffer == NULL)
+		goto out;
+
+	result = nior;
+	nior = NULL;
+
+ out:
+
+	if(nior != NULL)
+		delete_net_request(nior);
+
+	return(result);
+}
+
+/* Allocate a network I/O request, using a specific reply port (mandatory),
+ * and optionally allocate memory for a data buffer.
+ */
+static struct NetIORequest *
+create_net_request(struct MsgPort * reply_port, ULONG buffer_size)
+{
+	struct NetIORequest * result = NULL;
+	struct NetIORequest * nior;
+
+	nior = (struct NetIORequest *)AllocVec(sizeof(*nior), MEMF_ANY|MEMF_PUBLIC|MEMF_CLEAR);
+	if(nior == NULL)
+		goto out;
+
+	/* Keep track of this network I/O request, making it easier to clean up later. */
+	AddTail(&net_io_list,(struct Node *)&nior->nior_Link);
+
+	nior->nior_IOS2.ios2_Req.io_Message.mn_Node.ln_Type	= NT_REPLYMSG;
+	nior->nior_IOS2.ios2_Req.io_Message.mn_Length		= sizeof(nior->nior_IOS2);
+	nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort	= reply_port;
+
+	nior->nior_BufferSize = buffer_size;
+
+	/* Allocate memory for packet data transmission. We might just need it later... */
+	nior->nior_Buffer = AllocVec(nior->nior_BufferSize, MEMF_ANY|MEMF_PUBLIC);
+	if(nior->nior_Buffer == NULL)
+		goto out;
+
+	result = nior;
+	nior = NULL;
+
+ out:
+
+	if(nior != NULL)
+		delete_net_request(nior);
+
+	return(result);
 }
 
 /****************************************************************************/
@@ -364,27 +369,30 @@ network_cleanup(void)
 	struct MinNode * mn;
 	struct MinNode * mn_next;
 
-	/* Stop all network I/O requests currently in play. */
-	for(mn = (struct MinNode *)net_io_list.lh_Head ;
-		mn->mln_Succ != NULL ;
-		mn = mn->mln_Succ)
+	if(net_io_list_initialized)
 	{
-		abort_net_request(link_to_net_request(mn));
-	}
+		/* Stop all network I/O requests currently in play. */
+		for(mn = (struct MinNode *)net_io_list.lh_Head ;
+			mn->mln_Succ != NULL ;
+			mn = mn->mln_Succ)
+		{
+			abort_net_request(link_to_net_request(mn));
+		}
 
-	/* Release all network I/O requests except for the one
-	 * which was used to open the network device driver.
-	 */
-	for(mn = (struct MinNode *)net_io_list.lh_Head ;
-		mn->mln_Succ != NULL ;
-		mn = mn_next)
-	{
-		mn_next = mn->mln_Succ;
+		/* Release all network I/O requests except for the one
+		 * which was used to open the network device driver.
+		 */
+		for(mn = (struct MinNode *)net_io_list.lh_Head ;
+			mn->mln_Succ != NULL ;
+			mn = mn_next)
+		{
+			mn_next = mn->mln_Succ;
 
-		nior = link_to_net_request(mn);
+			nior = link_to_net_request(mn);
 
-		if(nior != control_request)
-			delete_net_request(nior);
+			if(nior != control_request)
+				delete_net_request(nior);
+		}
 	}
 
 	/* Finally, release the network I/O request which
@@ -439,6 +447,7 @@ network_setup(const struct cmd_args * args)
 	int i;
 
 	NewList(&net_io_list);
+	net_io_list_initialized = TRUE;
 
 	/* If the testing functionality is compiled into this command, the threshold
 	 * values for the various test operations will be read from environment
@@ -575,7 +584,9 @@ network_setup(const struct cmd_args * args)
 	/* This should be an Ethernet device with the standard address size (6 bytes). */
 	if(s2dq.HardwareType != S2WireType_Ethernet || s2dq.AddrFieldSize != 48)
 	{
-		Printf("%s: '%s', unit %ld does not correspond to an Ethernet device.\n","TFTPClient", args->DeviceName,(*args->DeviceUnit));
+		if(!args->Quiet)
+			Printf("%s: '%s', unit %ld does not correspond to an Ethernet device.\n","TFTPClient", args->DeviceName,(*args->DeviceUnit));
+
 		goto out;
 	}
 
@@ -588,10 +599,33 @@ network_setup(const struct cmd_args * args)
 	 */
 	if(buffer_size < sizeof(struct ip) + sizeof(struct udphdr) + SEGSIZE)
 	{
-		Printf("%s: Maximum transmission unit size (%ld bytes) of '%s', unit %ld is too small.\n","TFTPClient", buffer_size,
-			args->DeviceName,(*args->DeviceUnit));
-			
+		if(!args->Quiet)
+		{
+			Printf("%s: Maximum transmission unit size (%ld bytes) of '%s', unit %ld is too small.\n","TFTPClient", buffer_size,
+				args->DeviceName,(*args->DeviceUnit));
+		}
+
 		goto out;
+	}
+
+	/* Adjust the buffer size, if necessary. */
+	if(buffer_size != control_request->nior_BufferSize)
+	{
+		APTR new_buffer;
+		
+		new_buffer = AllocVec(buffer_size,MEMF_ANY|MEMF_PUBLIC);
+		if(new_buffer == NULL)
+		{
+			if(!args->Quiet)
+				PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
+
+			goto out;
+		}
+		
+		FreeVec(control_request->nior_Buffer);
+
+		control_request->nior_Buffer = new_buffer;
+		control_request->nior_BufferSize = buffer_size;
 	}
 
 	/* Find out which Ethernet address this device currently uses. */
@@ -683,7 +717,7 @@ network_setup(const struct cmd_args * args)
 	if(error == OK)
 		memmove(local_ethernet_address,default_ethernet_address,sizeof(local_ethernet_address));
 
-	write_request = duplicate_net_request(control_request, NULL, buffer_size);
+	write_request = duplicate_net_request(control_request, NULL);
 	if(write_request == NULL)
 	{
 		if(!args->Quiet)
@@ -695,7 +729,7 @@ network_setup(const struct cmd_args * args)
 	/* We set up four ARP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 4 ; i++)
 	{
-		read_request = duplicate_net_request(control_request, net_read_port, buffer_size);
+		read_request = duplicate_net_request(control_request, net_read_port);
 		if(read_request == NULL)
 		{
 			if(!args->Quiet)
@@ -710,7 +744,7 @@ network_setup(const struct cmd_args * args)
 	/* We set up eight IP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 8 ; i++)
 	{
-		read_request = duplicate_net_request(control_request, net_read_port, buffer_size);
+		read_request = duplicate_net_request(control_request, net_read_port);
 		if(read_request == NULL)
 		{
 			if(!args->Quiet)

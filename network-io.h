@@ -74,7 +74,6 @@ struct NetIORequest
 	BOOL				nior_IsDuplicate;	/* False if device driver was opened with this IORequest, true otherwise */
 	BOOL				nior_InUse;			/* True if used with SendIO() */
 
-	BOOL				nior_FreeBuffer;	/* True if nior_Buffer should be freed, too, when this NetIORequest is freed */
 	APTR				nior_Buffer;		/* Address of transmission buffer */
 	ULONG				nior_BufferSize;	/* Size of transmission buffer in bytes */
 };

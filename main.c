@@ -591,6 +591,8 @@ main(int argc,char ** argv)
 				{
 					const char * type = (read_request->nior_Type == ETHERTYPE_IP) ? "IP" : "ARP";
 
+					read_request->nior_InUse = FALSE;
+
 					if(0 < drop_rx && (rand() % 100) < drop_rx)
 					{
 						Printf("TESTING: Dropping received %s packet.\n", type);

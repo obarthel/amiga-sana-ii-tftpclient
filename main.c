@@ -877,7 +877,8 @@ main(int argc,char ** argv)
 											{
 												last_block_transmitted = TRUE;
 
-												Printf("This is the last block to be read.\n");
+												if(args.Verbose)
+													Printf("This is the last block to be read.\n");
 											}
 
 											tftp_output->th_opcode	= TFTP_PACKET_DATA;
@@ -955,7 +956,8 @@ main(int argc,char ** argv)
 											{
 												last_block_transmitted = TRUE;
 
-												Printf("This is the last block to be read.\n");
+												if(args.Verbose)
+													Printf("This is the last block to be read.\n");
 											}
 
 											tftp_output->th_opcode	= TFTP_PACKET_DATA;

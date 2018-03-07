@@ -184,7 +184,7 @@ delete_net_request(struct NetIORequest * nior)
  * and allocating a new data buffer if desired.
  */
 static struct NetIORequest *
-duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_port)
+duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_port, ULONG buffer_size)
 {
 	struct NetIORequest * result = NULL;
 	struct NetIORequest * nior;
@@ -209,10 +209,7 @@ duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_p
 	/* Remember not to close the device driver when this request is freed. */
 	nior->nior_IsDuplicate = TRUE;
 
-	/* We use the same buffer size as the request which this is
-	 * a duplicate of.
-	 */
-	nior->nior_BufferSize = orig->nior_BufferSize;
+	nior->nior_BufferSize = buffer_size;
 
 	nior->nior_Buffer = AllocVec(nior->nior_BufferSize, MEMF_ANY|MEMF_PUBLIC);
 	if(nior->nior_Buffer == NULL)
@@ -229,11 +226,10 @@ duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_p
 	return(result);
 }
 
-/* Allocate a network I/O request, using a specific reply port (mandatory),
- * and optionally allocate memory for a data buffer.
+/* Allocate a network I/O request, using a specific reply port (mandatory).
  */
 static struct NetIORequest *
-create_net_request(struct MsgPort * reply_port, ULONG buffer_size)
+create_net_request(struct MsgPort * reply_port)
 {
 	struct NetIORequest * result = NULL;
 	struct NetIORequest * nior;
@@ -248,13 +244,6 @@ create_net_request(struct MsgPort * reply_port, ULONG buffer_size)
 	nior->nior_IOS2.ios2_Req.io_Message.mn_Node.ln_Type	= NT_REPLYMSG;
 	nior->nior_IOS2.ios2_Req.io_Message.mn_Length		= sizeof(nior->nior_IOS2);
 	nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort	= reply_port;
-
-	nior->nior_BufferSize = buffer_size;
-
-	/* Allocate memory for packet data transmission. We might just need it later... */
-	nior->nior_Buffer = AllocVec(nior->nior_BufferSize, MEMF_ANY|MEMF_PUBLIC);
-	if(nior->nior_Buffer == NULL)
-		goto out;
 
 	result = nior;
 	nior = NULL;
@@ -315,7 +304,7 @@ sana2_byte_copy_from_buff(
 	LONG result;
 
 	/* Do not copy more data than the buffer will hold. */
-	if(n <= from->nior_BufferSize)
+	if(n <= from->nior_BufferSize && from->nior_Buffer != NULL)
 	{
 		memmove(to,from->nior_Buffer,n);
 
@@ -342,7 +331,7 @@ sana2_byte_copy_to_buff(
 	LONG result;
 
 	/* Do not copy more data than the buffer will hold. */
-	if(n <= to->nior_BufferSize)
+	if(n <= to->nior_BufferSize && to->nior_Buffer != NULL)
 	{
 		memmove(to->nior_Buffer,from,n);
 
@@ -509,7 +498,7 @@ network_setup(const struct cmd_args * args)
 		goto out;
 	}
 
-	control_request = create_net_request(net_control_port, buffer_size);
+	control_request = create_net_request(net_control_port);
 	if(control_request == NULL)
 	{
 		if(!args->Quiet)
@@ -591,7 +580,7 @@ network_setup(const struct cmd_args * args)
 	}
 
 	/* The transmission buffer size should be as large as the device supports, and not smaller. */
-	if (buffer_size < s2dq.MTU || buffer_size > s2dq.MTU)
+	if (s2dq.MTU > 0 && buffer_size != s2dq.MTU)
 		buffer_size = s2dq.MTU;
 
 	/* For TFTP with 512 byte segments the minimum Ethernet packet size
@@ -606,26 +595,6 @@ network_setup(const struct cmd_args * args)
 		}
 
 		goto out;
-	}
-
-	/* Adjust the buffer size, if necessary. */
-	if(buffer_size != control_request->nior_BufferSize)
-	{
-		APTR new_buffer;
-		
-		new_buffer = AllocVec(buffer_size,MEMF_ANY|MEMF_PUBLIC);
-		if(new_buffer == NULL)
-		{
-			if(!args->Quiet)
-				PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
-
-			goto out;
-		}
-		
-		FreeVec(control_request->nior_Buffer);
-
-		control_request->nior_Buffer = new_buffer;
-		control_request->nior_BufferSize = buffer_size;
 	}
 
 	/* Find out which Ethernet address this device currently uses. */
@@ -717,7 +686,7 @@ network_setup(const struct cmd_args * args)
 	if(error == OK)
 		memmove(local_ethernet_address,default_ethernet_address,sizeof(local_ethernet_address));
 
-	write_request = duplicate_net_request(control_request, NULL);
+	write_request = duplicate_net_request(control_request, NULL, buffer_size);
 	if(write_request == NULL)
 	{
 		if(!args->Quiet)
@@ -729,7 +698,7 @@ network_setup(const struct cmd_args * args)
 	/* We set up four ARP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 4 ; i++)
 	{
-		read_request = duplicate_net_request(control_request, net_read_port);
+		read_request = duplicate_net_request(control_request, net_read_port, buffer_size);
 		if(read_request == NULL)
 		{
 			if(!args->Quiet)
@@ -744,7 +713,7 @@ network_setup(const struct cmd_args * args)
 	/* We set up eight IP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 8 ; i++)
 	{
-		read_request = duplicate_net_request(control_request, net_read_port);
+		read_request = duplicate_net_request(control_request, net_read_port, buffer_size);
 		if(read_request == NULL)
 		{
 			if(!args->Quiet)

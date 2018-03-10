@@ -106,6 +106,7 @@ void
 send_net_io_read_request(struct NetIORequest * nior,UWORD type)
 {
 	assert( NOT nior->nior_InUse );
+	assert( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
 	
 	nior->nior_Type						= type;
 	nior->nior_IOS2.ios2_PacketType		= nior->nior_Type;
@@ -130,6 +131,8 @@ link_to_net_request(const struct MinNode * mn)
 	/* NOTE: link must be located right behind the IOSana2Req. */
 	result = (struct NetIORequest *)( ((struct IOSana2Req *)mn)-1 );
 
+	assert( result->nior_Link.mln_Succ != NULL && result->nior_Link.mln_Pred != NULL );
+
 	return(result);
 }
 
@@ -145,6 +148,8 @@ abort_net_request(struct NetIORequest * nior)
 	/* Is this IORequest valid and still in play? */
 	if(nior != NULL && nior->nior_InUse)
 	{
+		assert( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
+
 		/* Abort the IORequest operation if it has not finished yet. */
 		if(CheckIO((struct IORequest *)nior) == BUSY)
 			AbortIO((struct IORequest *)nior);
@@ -165,7 +170,10 @@ delete_net_request(struct NetIORequest * nior)
 	{
 		abort_net_request(nior);
 
+		assert( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
+
 		Remove((struct Node *)&nior->nior_Link);
+		nior->nior_Link.mln_Succ = nior->nior_Link.mln_Pred = NULL;
 
 		if(nior->nior_IOS2.ios2_Req.io_Device != NULL)
 		{
@@ -189,6 +197,9 @@ duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_p
 	struct NetIORequest * result = NULL;
 	struct NetIORequest * nior;
 
+	assert( orig != NULL );
+	assert( orig->nior_Link.mln_Succ != NULL && orig->nior_Link.mln_Pred != NULL );
+
 	nior = (struct NetIORequest *)AllocVec(sizeof(*nior), MEMF_ANY|MEMF_PUBLIC|MEMF_CLEAR);
 	if(nior == NULL)
 		goto out;
@@ -196,7 +207,7 @@ duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_p
 	/* Keep track of this network I/O request, making it easier to clean up later. */
 	AddTail(&net_io_list,(struct Node *)&nior->nior_Link);
 
-	/* Make a copy of the SANA-II I/O request, and nothing else. */
+	/* Make a copy of the SANA-II I/O request, and nothing else (structure copy). */
 	nior->nior_IOS2 = orig->nior_IOS2;
 
 	/* Make sure that this is safe to use with CheckIO() and WaitIO(). */
@@ -535,7 +546,13 @@ network_setup(const struct cmd_args * args)
 	control_request->nior_IOS2.ios2_WireError		= 0;
 
 	memset(&s2dq,0,sizeof(s2dq));
-	s2dq.SizeAvailable = sizeof(s2dq) - sizeof(s2dq.RawMTU); /* ZZZ keep a2065.device happy */
+
+	/* The SizeAvailable field must not suggest a larger value than
+	 * the a2065.device is prepared to accept, or strange things
+	 * may happen. We are not interested in the RawMTU field here,
+	 * so this restriction is harmless.
+	 */
+	s2dq.SizeAvailable = sizeof(s2dq) - sizeof(s2dq.RawMTU);
 
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)

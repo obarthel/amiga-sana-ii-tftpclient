@@ -415,19 +415,25 @@ main(int argc,char ** argv)
 		const char * from_computer;
 		const char * to_computer;
 
-		sprintf(ipv4_address,"%lu.%lu.%lu.%lu",
-			(to_ipv4_address >> 24) & 0xff,
-			(to_ipv4_address >> 16) & 0xff,
-			(to_ipv4_address >>  8) & 0xff,
-			 to_ipv4_address        & 0xff);
-
 		if(from_ipv4_address == 0)
 		{
+			sprintf(ipv4_address,"%lu.%lu.%lu.%lu",
+				(to_ipv4_address >> 24) & 0xff,
+				(to_ipv4_address >> 16) & 0xff,
+				(to_ipv4_address >>  8) & 0xff,
+				 to_ipv4_address        & 0xff);
+
 			from_computer	= "this computer";
 			to_computer		= ipv4_address;
 		}
 		else
 		{
+			sprintf(ipv4_address,"%lu.%lu.%lu.%lu",
+				(from_ipv4_address >> 24) & 0xff,
+				(from_ipv4_address >> 16) & 0xff,
+				(from_ipv4_address >>  8) & 0xff,
+				 from_ipv4_address        & 0xff);
+
 			from_computer	= ipv4_address;
 			to_computer		= "this computer";
 		}
@@ -1011,6 +1017,111 @@ main(int argc,char ** argv)
 									else
 										Printf("Ignoring UDP datagram.\n");
 								}
+							}
+						}
+						/* Is this an ICMP message? Could be a "host unreachable" error. */
+						else if (((ip->ip_v_hl >> 4) & 15) == IPVERSION && ip->ip_pr == IPPROTO_ICMP)
+						{
+							const struct icmp_header * icmp_header = (struct icmp_header *)&ip[1];
+
+							/* The ICMP header and message data checksum should be correct. */
+							if(in_cksum(&ip[1],ip->ip_len - sizeof(*ip)) == 0)
+							{
+								/* We print more detailed information for the
+								 * "unreachable" error.
+								 */
+								if(icmp_header->type == icmp_type_unreach)
+								{
+									const struct icmp_unreachable_header * unreachable = (struct icmp_unreachable_header *)icmp_header;
+
+									if(args.Verbose)
+									{
+										const char * type;
+										char number[20];
+
+										switch(unreachable->header.code)
+										{
+											case icmp_code_unreach_net:
+
+												type = "bad net";
+												break;
+
+											case icmp_code_unreach_host:
+
+												type = "bad host";
+												break;
+
+											case icmp_code_unreach_protocol:
+
+												type = "bad protocol";
+												break;
+
+											case icmp_code_unreach_port:
+
+												type = "bad port";
+												break;
+
+											case icmp_code_unreach_needfrag:
+
+												type = "IP_DF caused drop";
+												break;
+
+											case icmp_code_unreach_srcfail:
+
+												type = "src route failed";
+												break;
+
+											case icmp_code_unreach_net_unknown:
+
+												type = "unknown net";
+												break;
+
+											case icmp_code_unreach_host_unknown:
+
+												type = "unknown host";
+												break;
+
+											case icmp_code_unreach_isolated:
+
+												type = "src host isolated";
+												break;
+
+											case icmp_code_unreach_net_prohib:
+											case icmp_code_unreach_host_prohib:
+
+												type = "prohibited access";
+												break;
+
+											case icmp_code_unreach_tosnet:
+
+												type = "bad tos for net";
+												break;
+
+											case icmp_code_unreach_toshost:
+
+												type = "bad tos for host";
+												break;
+
+											default:
+
+												sprintf(number,"%d",unreachable->header.code);
+												type = number;
+												break;
+										}
+
+										Printf("Ignoring ICMP datagram error \"destination unreachable\" and type \"%s\".\n", type);
+									}
+								}
+								else
+								{
+									if(args.Verbose)
+										Printf("Ignoring ICMP datagram with code=%ld and type=%ld.\n", icmp_header->type, icmp_header->code);
+								}
+							}
+							else
+							{
+								if(args.Verbose)
+									Printf("Ignoring ICMP datagram with incorrect checksum.\n");
 							}
 						}
 						else

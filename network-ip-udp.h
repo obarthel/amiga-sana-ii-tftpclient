@@ -68,7 +68,8 @@ struct udphdr
  */
 #define	IPVERSION	4
 
-#define	IPPROTO_UDP	17 /* user datagram protocol */
+#define	IPPROTO_ICMP	1	/* control message protocol */
+#define	IPPROTO_UDP		17	/* user datagram protocol */
 
 struct ip
 {
@@ -101,6 +102,47 @@ struct udp_pseudo_header
 	UWORD	uh_dport;		/* destination port */
 	WORD	uh_ulen;		/* udp length */
 	UWORD	uh_sum;			/* udp checksum */
+};
+
+/****************************************************************************/
+
+/* Basic ICMP header; there may be other data following it.  */
+struct icmp_header
+{
+	UBYTE type;
+	UBYTE code;
+	UWORD checksum;
+};
+
+/* ICMP message for "destination unreachable". */
+struct icmp_unreachable_header
+{
+	struct icmp_header	header;
+	ULONG				unused;
+	struct ip			ip;
+};
+
+/****************************************************************************/
+
+/* Definition of type and code field values for ICMP. We are
+ * only interested in the "unreachable" part.
+ */
+enum icmp_errors_and_codes
+{
+	icmp_type_unreach=3,				/* destination unreachable */
+	icmp_code_unreach_net=0,			/* bad net */
+	icmp_code_unreach_host=1,			/* bad host */
+	icmp_code_unreach_protocol=2,		/* bad protocol */
+	icmp_code_unreach_port=3,			/* bad port */
+	icmp_code_unreach_needfrag=4,		/* IP_DF caused drop */
+	icmp_code_unreach_srcfail=5,		/* src route failed */
+	icmp_code_unreach_net_unknown=6,	/* unknown net */
+	icmp_code_unreach_host_unknown=7,	/* unknown host */
+	icmp_code_unreach_isolated=8,		/* src host isolated */
+	icmp_code_unreach_net_prohib=9,		/* prohibited access */
+	icmp_code_unreach_host_prohib=10,	/* ditto */
+	icmp_code_unreach_tosnet=11,		/* bad tos for net */
+	icmp_code_unreach_toshost=12,		/* bad tos for host */
 };
 
 /****************************************************************************/

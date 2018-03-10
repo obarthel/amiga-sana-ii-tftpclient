@@ -131,7 +131,7 @@ get_io_error_text(int error)
 
 /****************************************************************************/
 
-/* Looks up the descriptive text for an Amiga SANA-II device error code.
+/* Looks up the descriptive text for an Amiga SANA-II wire error code.
  * Returns NULL if no such text is available.
  */
 const char *

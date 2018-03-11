@@ -49,6 +49,7 @@
 	#define INTERRUPT __interrupt
 	#define FAR __far
 	#define STDARGS __stdargs
+	#define SAVE_DS __saveds
 #elif defined(__GNUC__) && defined(AMIGA)
 	#ifndef ASM
 	#define ASM
@@ -68,6 +69,9 @@
 	#ifndef STDARGS
 	#define STDARGS __attribute__((__stkparm__))
 	#endif /* STDARGS */
+	#ifndef SAVE_DS
+	#define SAVE_DS __attribute__((__saveds__))
+	#endif /* SAVE_DS */
 #else
 	#define ASM
 	#define REG(r, p) p
@@ -75,6 +79,7 @@
 	#define INTERRUPT
 	#define FAR
 	#define STDARGS
+	#define SAVE_DS
 #endif /* __SASC */
 
 /****************************************************************************/

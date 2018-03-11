@@ -147,7 +147,7 @@ cleanup(void)
  * and -1 on failure.
  */
 static int
-setup(const struct cmd_args * args)
+setup(BPTR error_output, const struct cmd_args * args)
 {
 	int result = FAILURE;
 
@@ -170,15 +170,10 @@ setup(const struct cmd_args * args)
 	}
 	#endif /* __amigaos4__ */
 
-	if(timer_setup() != OK)
-	{
-		if(!args->Quiet)
-			Printf("%s: Could not initialize interval timer.\n","TFTPClient");
-
+	if(timer_setup(error_output,args) != OK)
 		goto out;
-	}
 
-	if(network_setup(args) != OK)
+	if(network_setup(error_output, args) != OK)
 		goto out;
 
 	result = OK;
@@ -238,6 +233,8 @@ main(int argc,char ** argv)
 	BOOL last_block_transmitted = FALSE;
 	int num_eof_acknowledgements = 3;
 	LONG total_num_bytes_transferred = 0;
+	const struct Process * this_process = (struct Process *)FindTask(NULL);
+	BPTR error_output = this_process->pr_CES != (BPTR)NULL ? this_process->pr_CES : Output();
 
 	SETDEBUGLEVEL(DEBUGLEVEL_CallTracing);
 
@@ -412,7 +409,7 @@ main(int argc,char ** argv)
 	{
 		if(!args.Quiet)
 		{
-			Printf("%s: File name \"%s\" is too long (up to %ld characters are allowed).\n","TFTPClient",
+			FPrintf(error_output, "%s: File name \"%s\" is too long (up to %ld characters are allowed).\n","TFTPClient",
 				remote_filename,sizeof(tftp_packet) - (offsetof(struct tftphdr, th_data) + 1 + strlen("octet") + 1));
 		}
 
@@ -420,7 +417,7 @@ main(int argc,char ** argv)
 	}
 
 	/* The arguments check out, now set up the network and timer I/O. */
-	if(setup(&args) < 0)
+	if(setup(error_output, &args) < 0)
 		goto out;
 
 	if(args.Verbose)
@@ -1037,7 +1034,7 @@ main(int argc,char ** argv)
 								else
 								{
 									if(!args.Quiet)
-										Printf("%s: Received unsupported TFTP operation %ld -- aborting.\n","TFTPClient",tftp->th_opcode);
+										FPrintf(error_output, "%s: Received unsupported TFTP operation %ld -- aborting.\n","TFTPClient",tftp->th_opcode);
 
 									send_tftp_error(TFTP_ERROR_BADOP,"Huh?",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -1069,9 +1066,13 @@ main(int argc,char ** argv)
 							if(in_cksum(&ip[1],ip->ip_len - sizeof(*ip)) == 0)
 							{
 								/* We print more detailed information for the
-								 * "unreachable" error.
+								 * "unreachable" error, but only if we didn't
+								 * already finish transmitting data. Some TFTP
+								 * servers seem to drop out after the last block
+								 * has been transmitted, which produces a
+								 * "destination unreachable: bad port" error.
 								 */
-								if(icmp_header->type == icmp_type_unreach)
+								if(icmp_header->type == icmp_type_unreach && NOT last_block_transmitted)
 								{
 									const struct icmp_unreachable_header * unreachable = (struct icmp_unreachable_header *)icmp_header;
 
@@ -1150,8 +1151,11 @@ main(int argc,char ** argv)
 												break;
 										}
 
-										Printf("Ignoring ICMP datagram error \"destination unreachable\" and type \"%s\".\n", type);
+										FPrintf(error_output,"%s: Destination unreachable (%s) -- aborting.\n", "TFTPClient", type);
 									}
+
+									result = RETURN_ERROR;
+									goto out;
 								}
 								else
 								{
@@ -1289,8 +1293,9 @@ main(int argc,char ** argv)
 				if(num_arp_resolution_attempts == 0)
 				{
 					if(args.Verbose)
-						Printf("No response to ARP query received -- aborting.\n");
+						FPrintf(error_output, "%s: No response to ARP query received -- aborting.\n","TFTPClient");
 
+					result = RETURN_ERROR;
 					goto out;
 				}
 

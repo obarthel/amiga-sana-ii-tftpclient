@@ -97,9 +97,9 @@ args.o : args.c args.h
 assert.o : assert.c
 error-codes.o : error-codes.c macros.h network-tftp.h error-codes.h
 main.o : main.c macros.h args.h network-io.h network-arp.h network-ip-udp.h network-tftp.h error-codes.h testing.h timer.h assert.h TFTPClient_rev.h
-network-arp.o : network-arp.c testing.h args.h network-io.h network-arp.h assert.h
+network-arp.o : network-arp.c testing.h args.h network-io.h network-arp.h assert.h macros.h
 network-io.o : network-io.c network-ip-udp.h network-tftp.h error-codes.h args.h network-io.h testing.h macros.h compiler.h assert.h
-network-ip-udp.o : network-ip-udp.c testing.h args.h network-io.h network-ip-udp.h assert.h
+network-ip-udp.o : network-ip-udp.c testing.h args.h network-io.h network-ip-udp.h assert.h macros.h
 network-tftp.o : network-tftp.c network-tftp.h network-ip-udp.h assert.h
 testing.o : testing.c testing.h
 timer.o : timer.c timer.h macros.h assert.h

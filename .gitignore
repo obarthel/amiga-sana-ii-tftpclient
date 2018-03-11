@@ -1,3 +1,5 @@
 *.o
 *.map
 *.debug
+*.a
+TFTPClient

@@ -195,9 +195,6 @@ delete_net_request(struct NetIORequest * nior)
 
 	if(nior != NULL)
 	{
-		/* Render the copying functions unusable. */
-		nior->nior_BufferSize = 0;
-
 		abort_net_request(nior);
 
 		ASSERT( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
@@ -439,8 +436,8 @@ network_cleanup(void)
 		struct MinNode * mn;
 		struct MinNode * mn_next;
 
-		/* Make the copying functions of all I/O requests in
-		 * play return FALSE.
+		/* Try to abort all pending I/O requests, and for good measure
+		 * also render the copying functions useless.
 		 */
 		for(mn = (struct MinNode *)net_io_list.lh_Head ;
 			mn->mln_Succ != NULL ;
@@ -450,10 +447,16 @@ network_cleanup(void)
 
 			if(nior->nior_InUse)
 			{
-				D(("buffer size of request 0x%08lx set to zero", nior));
+				/* Abort the IORequest operation if it has not finished yet. */
+				if(CheckIO((struct IORequest *)nior) == BUSY)
+				{
+					D(("aborting pending I/O request 0x%08lx", nior));
 
-				nior->nior_BufferSize = 0;
+					AbortIO((struct IORequest *)nior);
+				}
 			}
+
+			nior->nior_BufferSize = 0;
 		}
 
 		SHOWMSG("stopping all pending I/O requests");
@@ -465,13 +468,21 @@ network_cleanup(void)
 		{
 			nior = link_to_net_request(mn);
 
-			abort_net_request(nior);
+			if(nior->nior_InUse)
+			{
+				D(("waiting for pending I/O request 0x%08lx to return...", nior));
+
+				WaitIO((struct IORequest *)nior);
+
+				nior->nior_InUse = FALSE;
+			}
 		}
 
 		SHOWMSG("releasing all allocated memory for I/O request copies");
 
-		/* Release all network I/O requests except for the one
-		 * which was used to open the network device driver.
+		/* Release all network I/O requests except for the
+		 * one which was used to open the network device
+		 * driver.
 		 */
 		for(mn = (struct MinNode *)net_io_list.lh_Head ;
 			mn->mln_Succ != NULL ;
@@ -481,8 +492,15 @@ network_cleanup(void)
 
 			nior = link_to_net_request(mn);
 
-			delete_net_request(nior);
+			if(nior->nior_IsDuplicate)
+				delete_net_request(nior);
 		}
+	}
+
+	if(control_request != NULL)
+	{
+		delete_net_request(control_request);
+		control_request = NULL;
 	}
 
 	if(net_read_port != NULL)
@@ -507,7 +525,7 @@ network_cleanup(void)
  * and -1 on failure.
  */
 int
-network_setup(const struct cmd_args * args)
+network_setup(BPTR error_output, const struct cmd_args * args)
 {
 	static struct TagItem buffer_management[] =
 	{
@@ -578,7 +596,7 @@ network_setup(const struct cmd_args * args)
 	if(net_read_port == NULL)
 	{
 		if(!args->Quiet)
-			Printf("%s: Could not create network read MsgPort.\n","TFTPClient");
+			FPrintf(error_output, "%s: Could not create network read MsgPort.\n","TFTPClient");
 
 		goto out;
 	}
@@ -587,7 +605,7 @@ network_setup(const struct cmd_args * args)
 	if(net_control_port == NULL)
 	{
 		if(!args->Quiet)
-			Printf("%s: Could not create network write MsgPort.\n","TFTPClient");
+			FPrintf(error_output, "%s: Could not create network write MsgPort.\n","TFTPClient");
 
 		goto out;
 	}
@@ -600,6 +618,8 @@ network_setup(const struct cmd_args * args)
 
 		goto out;
 	}
+
+	SHOWPOINTER(control_request);
 
 	control_request->nior_IOS2.ios2_BufferManagement = buffer_management;
 
@@ -615,7 +635,7 @@ network_setup(const struct cmd_args * args)
 				error_text = other_error_text;
 			}
 
-			Printf("%s: Could not open '%s', unit %ld (%s).\n","TFTPClient", args->DeviceName,(*args->DeviceUnit), error_text);
+			FPrintf(error_output, "%s: Could not open '%s', unit %ld (%s).\n","TFTPClient", args->DeviceName,(*args->DeviceUnit), error_text);
 		}
 
 		goto out;
@@ -637,6 +657,8 @@ network_setup(const struct cmd_args * args)
 	 */
 	s2dq.SizeAvailable = sizeof(s2dq) - sizeof(s2dq.RawMTU);
 
+	ASSERT( NOT control_request->nior_InUse );
+
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)
 	{
@@ -663,7 +685,7 @@ network_setup(const struct cmd_args * args)
 				}
 			}
 
-			Printf("%s: Could not query '%s', unit %ld parameters (%s, %s).\n","TFTPClient",
+			FPrintf(error_output, "%s: Could not query '%s', unit %ld parameters (%s, %s).\n","TFTPClient",
 				args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text);
 		}
 		
@@ -674,7 +696,7 @@ network_setup(const struct cmd_args * args)
 	if(s2dq.HardwareType != S2WireType_Ethernet || s2dq.AddrFieldSize != 48)
 	{
 		if(!args->Quiet)
-			Printf("%s: '%s', unit %ld does not correspond to an Ethernet device.\n","TFTPClient", args->DeviceName,(*args->DeviceUnit));
+			FPrintf(error_output, "%s: '%s', unit %ld does not correspond to an Ethernet device.\n","TFTPClient", args->DeviceName,(*args->DeviceUnit));
 
 		goto out;
 	}
@@ -690,7 +712,7 @@ network_setup(const struct cmd_args * args)
 	{
 		if(!args->Quiet)
 		{
-			Printf("%s: Maximum transmission unit size (%ld bytes) of '%s', unit %ld is too small.\n","TFTPClient", buffer_size,
+			FPrintf(error_output, "%s: Maximum transmission unit size (%ld bytes) of '%s', unit %ld is too small.\n","TFTPClient", buffer_size,
 				args->DeviceName,(*args->DeviceUnit));
 		}
 
@@ -701,6 +723,8 @@ network_setup(const struct cmd_args * args)
 	control_request->nior_IOS2.ios2_Req.io_Command	= S2_GETSTATIONADDRESS;
 	control_request->nior_IOS2.ios2_StatData		= NULL;
 	control_request->nior_IOS2.ios2_WireError		= 0;
+
+	ASSERT( NOT control_request->nior_InUse );
 
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)
@@ -728,7 +752,7 @@ network_setup(const struct cmd_args * args)
 				}
 			}
 
-			Printf("%s: Could not obtain '%s', unit %ld station address (%s, %s).\n","TFTPClient",
+			FPrintf(error_output, "%s: Could not obtain '%s', unit %ld station address (%s, %s).\n","TFTPClient",
 				args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text);
 		}
 		
@@ -745,6 +769,8 @@ network_setup(const struct cmd_args * args)
 	control_request->nior_IOS2.ios2_WireError		= 0;
 
 	memmove(control_request->nior_IOS2.ios2_SrcAddr, control_request->nior_IOS2.ios2_DstAddr, SANA2_MAX_ADDR_BYTES);
+
+	ASSERT( NOT control_request->nior_InUse );
 
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK && control_request->nior_IOS2.ios2_WireError != S2WERR_IS_CONFIGURED)
@@ -772,7 +798,7 @@ network_setup(const struct cmd_args * args)
 				}
 			}
 
-			Printf("%s: Could not set '%s', unit %ld station address (%s, %s).\n","TFTPClient",
+			FPrintf(error_output, "%s: Could not set '%s', unit %ld station address (%s, %s).\n","TFTPClient",
 				args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text);
 		}
 		

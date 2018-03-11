@@ -46,6 +46,10 @@
 #include <devices/sana2.h>
 #endif /* DEVICES_SANA2_H */
 
+#ifndef DOS_DOS_H
+#include <dos/dos.h>
+#endif /* DOS_DOS_H */
+
 /****************************************************************************/
 
 #ifndef _ARGS_H
@@ -98,7 +102,7 @@ extern ULONG remote_ipv4_address;
 
 extern void send_net_io_read_request(struct NetIORequest * nior,UWORD type);
 extern void network_cleanup(void);
-extern int network_setup(const struct cmd_args * args);
+extern int network_setup(BPTR error_output, const struct cmd_args * args);
 
 /****************************************************************************/
 

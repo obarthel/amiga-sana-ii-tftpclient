@@ -42,12 +42,12 @@
 
 /****************************************************************************/
 
-#include <assert.h>
+#include "network-tftp.h"
+#include "network-ip-udp.h"
 
 /****************************************************************************/
 
-#include "network-tftp.h"
-#include "network-ip-udp.h"
+#include "assert.h"
 
 /****************************************************************************/
 
@@ -58,6 +58,8 @@ LONG
 send_tftp_acknowledgement(int block_number,int client_port_number,int server_port_number,UBYTE * tftp_packet)
 {
 	struct tftphdr * th = (struct tftphdr *)tftp_packet;
+
+	ASSERT( tftp_packet != NULL );
 
 	th->th_opcode	= TFTP_PACKET_ACK;
 	th->th_block	= block_number;
@@ -75,6 +77,9 @@ send_tftp_error(int error_code,STRPTR message,int client_port_number,int server_
 {
 	struct tftphdr * th = (struct tftphdr *)tftp_packet;
 	char * msg = th->th_msg;
+
+	ASSERT( message != NULL );
+	ASSERT( tftp_packet != NULL );
 
 	th->th_opcode	= TFTP_PACKET_ERROR;
 	th->th_code		= error_code;
@@ -95,6 +100,9 @@ start_tftp(int operation,STRPTR file_name,int client_port_number,int server_port
 {
 	struct tftphdr * th = (struct tftphdr *)tftp_packet;
 	UBYTE * stuff;
+
+	ASSERT( file_name != NULL );
+	ASSERT( tftp_packet != NULL );
 
 	th->th_opcode = operation;
 

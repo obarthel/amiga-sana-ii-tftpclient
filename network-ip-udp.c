@@ -42,10 +42,6 @@
 
 /****************************************************************************/
 
-#include <assert.h>
-
-/****************************************************************************/
-
 #define __USE_INLINE__
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -55,6 +51,10 @@
 #include "testing.h"
 #include "network-io.h"
 #include "network-ip-udp.h"
+
+/****************************************************************************/
+
+#include "assert.h"
 
 /****************************************************************************/
 
@@ -321,7 +321,8 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 	struct udp_pseudo_header * udp_pseudo_header;
 	int len;
 
-	assert( write_request->nior_BufferSize > 540 );
+	ASSERT( write_request->nior_BufferSize > 540 );
+	ASSERT( data_length <= write_request->nior_BufferSize );
 
 	/* Set the entire buffer contents to 0 because the
 	 * UDP payload length may not be an even number. In
@@ -382,7 +383,7 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 	ip->ip_sum	= 0;
 	ip->ip_sum	= in_cksum(ip, sizeof(*ip));
 
-	assert( len <= write_request->nior_BufferSize );
+	ASSERT( len <= write_request->nior_BufferSize );
 
 	write_request->nior_IOS2.ios2_Req.io_Command	= CMD_WRITE;
 	write_request->nior_IOS2.ios2_WireError			= 0;
@@ -405,6 +406,8 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 			if(write_request->nior_IOS2.ios2_DataLength > 0)
 			{
 				Printf("TESTING: Trashing IP datagram.\n");
+
+				ASSERT( write_request->nior_IOS2.ios2_DataLength <= write_request->nior_BufferSize );
 
 				((UBYTE *)write_request->nior_Buffer)[rand() % write_request->nior_IOS2.ios2_DataLength] ^= 0x81;
 			}
@@ -431,6 +434,8 @@ verify_udp_datagram_checksum(struct ip * ip)
 {
 	struct udphdr * udp = (struct udphdr *)&ip[1];
 	int checksum;
+
+	ASSERT( ip != NULL );
 
 	/* If this UDP datagram has a checksum, verify it. */
 	if(udp->uh_sum != 0)
@@ -475,9 +480,9 @@ get_ipv4_address_and_path_from_name(STRPTR name, ULONG * ipv4_address, STRPTR * 
 {
 	STRPTR s;
 
-	assert( name != NULL );
-	assert( ipv4_address != NULL );
-	assert( path_name != NULL );
+	ASSERT( name != NULL );
+	ASSERT( ipv4_address != NULL );
+	ASSERT( path_name != NULL );
 
 	/* If no IPv4 can be found as part of the name, then we return
 	 * just the name as is, and no IPv4 address.

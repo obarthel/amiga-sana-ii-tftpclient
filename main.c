@@ -85,6 +85,10 @@
 
 /****************************************************************************/
 
+#include "assert.h"
+
+/****************************************************************************/
+
 #include "TFTPClient_rev.h"
 
 #ifndef TESTING
@@ -112,6 +116,8 @@ struct Library *		UtilityBase;
 static void
 cleanup(void)
 {
+	ENTER();
+
 	network_cleanup();
 	timer_cleanup();
 	
@@ -130,6 +136,8 @@ cleanup(void)
 		}
 	}
 	#endif /* __amigaos4__ */
+
+	LEAVE();
 }
 
 /****************************************************************************/
@@ -142,6 +150,8 @@ static int
 setup(const struct cmd_args * args)
 {
 	int result = FAILURE;
+
+	ENTER();
 
 	atexit(cleanup);
 
@@ -175,6 +185,7 @@ setup(const struct cmd_args * args)
 
  out:
 
+	RETURN(result);
 	return(result);
 }
 
@@ -227,6 +238,8 @@ main(int argc,char ** argv)
 	BOOL last_block_transmitted = FALSE;
 	int num_eof_acknowledgements = 3;
 	LONG total_num_bytes_transferred = 0;
+
+	SETDEBUGLEVEL(DEBUGLEVEL_CallTracing);
 
 	memset(&args,0,sizeof(args));
 
@@ -305,7 +318,8 @@ main(int argc,char ** argv)
 	 * standard IPv4 formats. Some minimal filtering of
 	 * unusable addresses is performed here, too.
 	 */
-	if(!inet_aton(args.LocalIPAddress,&local_ipv4_address) || local_ipv4_address == 0 || local_ipv4_address == 0xFFFFFFFFUL || local_ipv4_address == 0x7F000001)
+	if(!inet_aton(args.LocalIPAddress,&local_ipv4_address) || local_ipv4_address == 0 ||
+	   local_ipv4_address == 0xFFFFFFFFUL || local_ipv4_address == 0x7F000001)
 	{
 		if(!args.Quiet)
 			Printf("%s: '%s' is not a valid local IPv4 address.\n","TFTPClient",args.LocalIPAddress);
@@ -590,6 +604,9 @@ main(int argc,char ** argv)
 			 * mark it as no longer in use.
 			 */
 			read_request = (struct NetIORequest *)GetMsg(net_read_port);
+			
+			if(read_request != NULL)
+				D(("read request 0x%08lx has returned", read_request));
 
 			#if defined(TESTING)
 			{
@@ -611,6 +628,8 @@ main(int argc,char ** argv)
 						if(read_request->nior_IOS2.ios2_DataLength > 0)
 						{
 							Printf("TESTING: Trashing received %s packet.\n", type);
+
+							ASSERT( read_request->nior_IOS2.ios2_DataLength <= read_request->nior_BufferSize );
 
 							((UBYTE *)read_request->nior_Buffer)[rand() % read_request->nior_IOS2.ios2_DataLength] ^= 0x81;
 						}
@@ -640,7 +659,7 @@ main(int argc,char ** argv)
 							int checksum;
 
 							/* Is the UDP datagram checksum OK, and the datagram is
-							 * intended for our use? Also, are we even ready to
+							 * intended for our use? Furthermore, are we even ready to
 							 * process it yet?
 							 */
 							checksum = verify_udp_datagram_checksum(ip);
@@ -661,6 +680,7 @@ main(int argc,char ** argv)
 										const char * error_text;
 										char number[20];
 										char message_buffer[SEGSIZE+1];
+										int message_length;
 
 										error_text = get_tftp_error_text(tftp->th_code);
 										if(error_text == NULL)
@@ -669,8 +689,13 @@ main(int argc,char ** argv)
 											error_text = number;
 										}
 
-										memmove(message_buffer,tftp->th_msg,length - offsetof(struct tftphdr, th_msg));
-										message_buffer[length - offsetof(struct tftphdr, th_msg)] = '\0';
+										message_length = length - offsetof(struct tftphdr, th_msg);
+
+										ASSERT( message_length >= 0 );
+										ASSERT( message_length < (int)sizeof(message_buffer) );
+
+										memmove(message_buffer,tftp->th_msg,message_length);
+										message_buffer[message_length] = '\0';
 
 										Printf("%s: Server responded with error '%s', \"%s\".\n","TFTPClient",error_text,message_buffer);
 									}
@@ -708,7 +733,7 @@ main(int argc,char ** argv)
 											server_udp_port_number_known = TRUE;
 
 											if(args.Verbose)
-												Printf("Server has acknowledged read request (using UDP port number %ld).\n", server_udp_port_number);
+												Printf("Server has acknowledged the read request (using UDP port number %ld).\n", server_udp_port_number);
 
 											/* Store the data, if any. */
 											if(payload_length > 0)
@@ -735,7 +760,7 @@ main(int argc,char ** argv)
 
 												total_num_bytes_transferred += payload_length;
 
-												/* We received some data to keep, do not delete the file. */
+												/* We received some data to keep, so do not delete the file. */
 												delete_destination_file = FALSE;
 											}
 
@@ -755,6 +780,10 @@ main(int argc,char ** argv)
 
 											send_tftp_acknowledgement(block_number-1,client_udp_port_number,server_udp_port_number,tftp_packet);
 
+											/* Restart the timer; make sure that we won't try to
+											 * service the returning time request or there will
+											 * be trouble.
+											 */
 											signals_received &= ~time_signal_mask;
 											start_time(1);
 										}
@@ -813,6 +842,10 @@ main(int argc,char ** argv)
 
 											send_tftp_acknowledgement(block_number-1,client_udp_port_number,server_udp_port_number,tftp_packet);
 
+											/* Restart the timer; make sure that we won't try to
+											 * service the returning time request or there will
+											 * be trouble.
+											 */
 											signals_received &= ~time_signal_mask;
 											start_time(1);
 										}
@@ -847,7 +880,7 @@ main(int argc,char ** argv)
 											server_udp_port_number_known = TRUE;
 
 											if(args.Verbose)
-												Printf("Server has acknowledged write request (using UDP port number %ld).\n", server_udp_port_number);
+												Printf("Server has acknowledged the write request (using UDP port number %ld).\n", server_udp_port_number);
 
 											tftp_state = tftp_state_read_from_file;
 
@@ -898,6 +931,10 @@ main(int argc,char ** argv)
 
 											send_udp(client_udp_port_number,server_udp_port_number,tftp_output,tftp_output_length);
 
+											/* Restart the timer; make sure that we won't try to
+											 * service the returning time request or there will
+											 * be trouble.
+											 */
 											signals_received &= ~time_signal_mask;
 											start_time(1);
 										}
@@ -977,6 +1014,10 @@ main(int argc,char ** argv)
 
 											send_udp(client_udp_port_number,server_udp_port_number,tftp_output,tftp_output_length);
 
+											/* Restart the timer; make sure that we won't try to
+											 * service the returning time request or there will
+											 * be trouble.
+											 */
 											signals_received &= ~time_signal_mask;
 											start_time(1);
 										}
@@ -1043,7 +1084,7 @@ main(int argc,char ** argv)
 										{
 											case icmp_code_unreach_net:
 
-												type = "bad net";
+												type = "bad network";
 												break;
 
 											case icmp_code_unreach_host:
@@ -1063,17 +1104,17 @@ main(int argc,char ** argv)
 
 											case icmp_code_unreach_needfrag:
 
-												type = "IP_DF caused drop";
+												type = "packet dropped due to fragmentation";
 												break;
 
 											case icmp_code_unreach_srcfail:
 
-												type = "src route failed";
+												type = "source route failed";
 												break;
 
 											case icmp_code_unreach_net_unknown:
 
-												type = "unknown net";
+												type = "unknown network";
 												break;
 
 											case icmp_code_unreach_host_unknown:
@@ -1083,7 +1124,7 @@ main(int argc,char ** argv)
 
 											case icmp_code_unreach_isolated:
 
-												type = "src host isolated";
+												type = "source host isolated";
 												break;
 
 											case icmp_code_unreach_net_prohib:
@@ -1094,12 +1135,12 @@ main(int argc,char ** argv)
 
 											case icmp_code_unreach_tosnet:
 
-												type = "bad tos for net";
+												type = "bad TOS for network";
 												break;
 
 											case icmp_code_unreach_toshost:
 
-												type = "bad tos for host";
+												type = "bad TOS for host";
 												break;
 
 											default:
@@ -1199,6 +1240,10 @@ main(int argc,char ** argv)
 									start_tftp(tftp_state == tftp_state_request_write ? TFTP_PACKET_WRQ : TFTP_PACKET_RRQ,
 										remote_filename,client_udp_port_number,server_udp_port_number,tftp_packet);
 
+									/* Restart the timer; make sure that we won't try to
+									 * service the returning time request or there will
+									 * be trouble.
+									 */
 									signals_received &= ~time_signal_mask;
 									start_time(1);
 								}

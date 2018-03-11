@@ -41,10 +41,6 @@
 
 /****************************************************************************/
 
-#include <assert.h>
-
-/****************************************************************************/
-
 #define __USE_INLINE__
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -57,6 +53,10 @@
 
 /****************************************************************************/
 
+#include "assert.h"
+
+/****************************************************************************/
+
 /* Send an ARP response message, which in this case means that we report which
  * combination of Ethernet address and IPv4 address this command uses. This sends
  * a single packet to the computer which broadcast an ARP request message.
@@ -66,7 +66,7 @@ send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_addres
 {
 	struct ARPHeaderEthernet * ahe = write_request->nior_Buffer;
 
-	assert( sizeof(*ahe) <= write_request->nior_BufferSize );
+	ASSERT( sizeof(*ahe) <= write_request->nior_BufferSize );
 
 	memset(ahe,0,sizeof(*ahe));
 
@@ -112,6 +112,8 @@ send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_addres
 			{
 				Printf("TESTING: Trashing ARP response.\n");
 
+				ASSERT( write_request->nior_IOS2.ios2_DataLength <= write_request->nior_BufferSize );
+
 				((UBYTE *)write_request->nior_Buffer)[rand() % write_request->nior_IOS2.ios2_DataLength] ^= 0x81;
 			}
 		}
@@ -131,8 +133,11 @@ LONG
 broadcast_arp_query(ULONG target_ipv4_address)
 {
 	struct ARPHeaderEthernet * ahe = write_request->nior_Buffer;
+	LONG error;
 
-	assert( sizeof(*ahe) <= write_request->nior_BufferSize );
+	ENTER();
+
+	ASSERT( sizeof(*ahe) <= write_request->nior_BufferSize );
 
 	memset(ahe,0,sizeof(*ahe));
 
@@ -168,6 +173,7 @@ broadcast_arp_query(ULONG target_ipv4_address)
 		{
 			Printf("TESTING: Dropping ARP query.\n");
 
+			RETURN(0);
 			return(0);
 		}
 		else if (0 < trash_tx && (rand() % 100) < trash_tx)
@@ -176,11 +182,16 @@ broadcast_arp_query(ULONG target_ipv4_address)
 			{
 				Printf("TESTING: Trashing ARP query.\n");
 
+				ASSERT( write_request->nior_IOS2.ios2_DataLength <= write_request->nior_BufferSize );
+
 				((UBYTE *)write_request->nior_Buffer)[rand() % write_request->nior_IOS2.ios2_DataLength] ^= 0x81;
 			}
 		}
 	}
 	#endif /* TESTING */
 
-	return(DoIO((struct IORequest *)write_request));
+	error = DoIO((struct IORequest *)write_request);
+
+	RETURN(error);
+	return(error);
 }

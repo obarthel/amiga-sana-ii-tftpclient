@@ -44,10 +44,6 @@
 
 /****************************************************************************/
 
-#include <assert.h>
-
-/****************************************************************************/
-
 #define __USE_INLINE__
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -69,6 +65,7 @@
 
 #include "macros.h"
 #include "compiler.h"
+#include "assert.h"
 
 /****************************************************************************/
 
@@ -105,8 +102,16 @@ ULONG remote_ipv4_address;
 void
 send_net_io_read_request(struct NetIORequest * nior,UWORD type)
 {
-	assert( NOT nior->nior_InUse );
-	assert( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
+	ENTER();
+
+	SHOWPOINTER(nior);
+	SHOWVALUE(type);
+
+	ASSERT( nior != NULL );
+	ASSERT( nior->nior_IOS2.ios2_Req.io_Device != NULL );
+	ASSERT( nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort != NULL );
+	ASSERT( NOT nior->nior_InUse );
+	ASSERT( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
 	
 	nior->nior_Type						= type;
 	nior->nior_IOS2.ios2_PacketType		= nior->nior_Type;
@@ -115,6 +120,8 @@ send_net_io_read_request(struct NetIORequest * nior,UWORD type)
 	nior->nior_InUse					= TRUE;
 
 	SendIO((struct IORequest *)nior);
+
+	LEAVE();
 }
 
 /****************************************************************************/
@@ -128,10 +135,12 @@ link_to_net_request(const struct MinNode * mn)
 {
 	struct NetIORequest * result;
 
+	ASSERT( mn != NULL );
+
 	/* NOTE: link must be located right behind the IOSana2Req. */
 	result = (struct NetIORequest *)( ((struct IOSana2Req *)mn)-1 );
 
-	assert( result->nior_Link.mln_Succ != NULL && result->nior_Link.mln_Pred != NULL );
+	ASSERT( result->nior_Link.mln_Succ != NULL && result->nior_Link.mln_Pred != NULL );
 
 	return(result);
 }
@@ -145,19 +154,33 @@ link_to_net_request(const struct MinNode * mn)
 static void
 abort_net_request(struct NetIORequest * nior)
 {
+	ENTER();
+
+	SHOWPOINTER( nior );
+	SHOWVALUE( nior->nior_InUse  );
+
 	/* Is this IORequest valid and still in play? */
 	if(nior != NULL && nior->nior_InUse)
 	{
-		assert( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
+		ASSERT( nior->nior_IOS2.ios2_Req.io_Device != NULL );
+		ASSERT( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
 
 		/* Abort the IORequest operation if it has not finished yet. */
 		if(CheckIO((struct IORequest *)nior) == BUSY)
+		{
+			SHOWMSG("aborting pending I/O request");
+
 			AbortIO((struct IORequest *)nior);
+		}
+
+		SHOWMSG("waiting for I/O request to return");
 
 		WaitIO((struct IORequest *)nior);
 
 		nior->nior_InUse = FALSE;
 	}
+
+	LEAVE();
 }
 
 /* Free the resources allocated for a network I/O request, making
@@ -166,11 +189,18 @@ abort_net_request(struct NetIORequest * nior)
 static void
 delete_net_request(struct NetIORequest * nior)
 {
+	ENTER();
+
+	SHOWPOINTER(nior);
+
 	if(nior != NULL)
 	{
+		/* Render the copying functions unusable. */
+		nior->nior_BufferSize = 0;
+
 		abort_net_request(nior);
 
-		assert( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
+		ASSERT( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
 
 		Remove((struct Node *)&nior->nior_Link);
 		nior->nior_Link.mln_Succ = nior->nior_Link.mln_Pred = NULL;
@@ -178,14 +208,27 @@ delete_net_request(struct NetIORequest * nior)
 		if(nior->nior_IOS2.ios2_Req.io_Device != NULL)
 		{
 			if(NOT nior->nior_IsDuplicate)
+			{
+				SHOWMSG("closing device driver");
+
+				ASSERT( NOT nior->nior_InUse );
+
 				CloseDevice((struct IORequest *)nior);
+			}
+
+			nior->nior_IOS2.ios2_Req.io_Device = NULL;
 		}
 
 		if(nior->nior_Buffer != NULL)
+		{
 			FreeVec(nior->nior_Buffer);
+			nior->nior_Buffer = NULL;
+		}
 
 		FreeVec(nior);
 	}
+
+	LEAVE();
 }
 
 /* Make a copy of a network I/O request, substituting the reply port if needed,
@@ -197,8 +240,9 @@ duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_p
 	struct NetIORequest * result = NULL;
 	struct NetIORequest * nior;
 
-	assert( orig != NULL );
-	assert( orig->nior_Link.mln_Succ != NULL && orig->nior_Link.mln_Pred != NULL );
+	ASSERT( orig != NULL );
+	ASSERT( orig->nior_IOS2.ios2_Req.io_Device != NULL );
+	ASSERT( orig->nior_Link.mln_Succ != NULL && orig->nior_Link.mln_Pred != NULL );
 
 	nior = (struct NetIORequest *)AllocVec(sizeof(*nior), MEMF_ANY|MEMF_PUBLIC|MEMF_CLEAR);
 	if(nior == NULL)
@@ -306,13 +350,23 @@ NiceOpenDevice(STRPTR name,LONG unit,struct IORequest *ior,LONG flags)
 /* Copy from the network device transmit buffer to the network I/O
  * request buffer. This is what the CMD_READ command uses.
  */
-static LONG ASM
+static LONG ASM SAVE_DS
 sana2_byte_copy_from_buff(
 	REG(a0,UBYTE *						to),
 	REG(a1,const struct NetIORequest *	from),
 	REG(d0,ULONG						n))
 {
 	LONG result;
+
+	ENTER();
+
+	SHOWPOINTER(to);
+	SHOWPOINTER((APTR)from);
+	SHOWVALUE(n);
+
+	ASSERT( to != NULL || n == 0 );
+	ASSERT( n <= from->nior_BufferSize );
+	ASSERT( from->nior_IOS2.ios2_Req.io_Device != NULL );
 
 	/* Do not copy more data than the buffer will hold. */
 	if(n <= from->nior_BufferSize && from->nior_Buffer != NULL)
@@ -327,19 +381,30 @@ sana2_byte_copy_from_buff(
 		result = FALSE;
 	}
 
+	RETURN(result);
 	return(result);
 }
 
 /* Copy to the network device transmit buffer from the network I/O
  * request buffer. This is what CMD_WRITE and S2_BROADCAST commands use.
  */
-static LONG ASM
+static LONG ASM SAVE_DS
 sana2_byte_copy_to_buff(
 	REG(a0,struct NetIORequest *	to),
 	REG(a1,const UBYTE *			from),
 	REG(d0,ULONG					n))
 {
 	LONG result;
+
+	ENTER();
+
+	SHOWPOINTER(to);
+	SHOWPOINTER((APTR)from);
+	SHOWVALUE(n);
+
+	ASSERT( from != NULL || n == 0 );
+	ASSERT( n <= to->nior_BufferSize );
+	ASSERT( to->nior_IOS2.ios2_Req.io_Device != NULL );
 
 	/* Do not copy more data than the buffer will hold. */
 	if(n <= to->nior_BufferSize && to->nior_Buffer != NULL)
@@ -354,6 +419,7 @@ sana2_byte_copy_to_buff(
 		result = FALSE;
 	}
 
+	RETURN(result);
 	return(result);
 }
 
@@ -365,19 +431,44 @@ sana2_byte_copy_to_buff(
 void
 network_cleanup(void)
 {
-	struct NetIORequest * nior;
-	struct MinNode * mn;
-	struct MinNode * mn_next;
+	ENTER();
 
 	if(net_io_list_initialized)
 	{
+		struct NetIORequest * nior;
+		struct MinNode * mn;
+		struct MinNode * mn_next;
+
+		/* Make the copying functions of all I/O requests in
+		 * play return FALSE.
+		 */
+		for(mn = (struct MinNode *)net_io_list.lh_Head ;
+			mn->mln_Succ != NULL ;
+			mn = mn->mln_Succ)
+		{
+			nior = link_to_net_request(mn);
+
+			if(nior->nior_InUse)
+			{
+				D(("buffer size of request 0x%08lx set to zero", nior));
+
+				nior->nior_BufferSize = 0;
+			}
+		}
+
+		SHOWMSG("stopping all pending I/O requests");
+
 		/* Stop all network I/O requests currently in play. */
 		for(mn = (struct MinNode *)net_io_list.lh_Head ;
 			mn->mln_Succ != NULL ;
 			mn = mn->mln_Succ)
 		{
-			abort_net_request(link_to_net_request(mn));
+			nior = link_to_net_request(mn);
+
+			abort_net_request(nior);
 		}
+
+		SHOWMSG("releasing all allocated memory for I/O request copies");
 
 		/* Release all network I/O requests except for the one
 		 * which was used to open the network device driver.
@@ -390,18 +481,8 @@ network_cleanup(void)
 
 			nior = link_to_net_request(mn);
 
-			if(nior != control_request)
-				delete_net_request(nior);
+			delete_net_request(nior);
 		}
-	}
-
-	/* Finally, release the network I/O request which
-	 * the network device driver was opened with.
-	 */
-	if(control_request != NULL)
-	{
-		delete_net_request(control_request);
-		control_request = NULL;
 	}
 
 	if(net_read_port != NULL)
@@ -415,6 +496,8 @@ network_cleanup(void)
 		DeleteMsgPort(net_control_port);
 		net_control_port = NULL;
 	}
+
+	LEAVE();
 }
 
 /****************************************************************************/
@@ -659,7 +742,6 @@ network_setup(const struct cmd_args * args)
 	 * already been taken care of.
 	 */
 	control_request->nior_IOS2.ios2_Req.io_Command	= S2_CONFIGINTERFACE;
-	control_request->nior_IOS2.ios2_StatData		= NULL;
 	control_request->nior_IOS2.ios2_WireError		= 0;
 
 	memmove(control_request->nior_IOS2.ios2_SrcAddr, control_request->nior_IOS2.ios2_DstAddr, SANA2_MAX_ADDR_BYTES);

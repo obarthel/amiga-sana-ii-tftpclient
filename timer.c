@@ -46,7 +46,10 @@
 
 #include "timer.h"
 
+/****************************************************************************/
+
 #include "macros.h"
+#include "assert.h"
 
 /****************************************************************************/
 
@@ -68,6 +71,9 @@ stop_time(void)
 {
 	if(time_in_use)
 	{
+		ASSERT( time_request != NULL );
+		ASSERT( time_request->tr_node.io_Device != NULL );
+
 		if(CheckIO((struct IORequest *)time_request) == BUSY)
 			AbortIO((struct IORequest *)time_request);
 
@@ -87,6 +93,11 @@ void
 start_time(ULONG seconds)
 {
 	stop_time();
+
+	ASSERT( NOT time_in_use );
+
+	ASSERT( time_request != NULL );
+	ASSERT( time_request->tr_node.io_Device != NULL );
 
 	time_request->tr_node.io_Command	= TR_ADDREQUEST;
 	time_request->tr_time.tv_secs		= seconds;
@@ -131,6 +142,8 @@ timer_setup(void)
 void
 timer_cleanup(void)
 {
+	ENTER();
+
 	if(time_request != NULL)
 	{
 		stop_time();
@@ -147,4 +160,6 @@ timer_cleanup(void)
 		DeleteMsgPort(time_port);
 		time_port = NULL;
 	}
+
+	LEAVE();
 }

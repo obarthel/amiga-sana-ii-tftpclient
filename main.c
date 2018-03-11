@@ -272,7 +272,7 @@ main(int argc,char ** argv)
 	if(!args.DeviceName)
 	{
 		if(!args.Quiet)
-			Printf("%s: Required %s argument is missing.\n","TFTPClient", "DEVICENAME");
+			FPrintf(error_output, "%s: Required %s argument is missing.\n","TFTPClient", "DEVICENAME");
 
 		goto out;
 	}
@@ -306,7 +306,7 @@ main(int argc,char ** argv)
 	if(!args.LocalIPAddress)
 	{
 		if(!args.Quiet)
-			Printf("%s: Required %s argument is missing.\n","TFTPClient", "LOCALADDRESS");
+			FPrintf(error_output, "%s: Required %s argument is missing.\n","TFTPClient", "LOCALADDRESS");
 
 		goto out;
 	}
@@ -319,7 +319,7 @@ main(int argc,char ** argv)
 	   local_ipv4_address == 0xFFFFFFFFUL || local_ipv4_address == 0x7F000001)
 	{
 		if(!args.Quiet)
-			Printf("%s: '%s' is not a valid local IPv4 address.\n","TFTPClient",args.LocalIPAddress);
+			FPrintf(error_output, "%s: '%s' is not a valid local IPv4 address.\n","TFTPClient",args.LocalIPAddress);
 
 		goto out;
 	}
@@ -331,7 +331,7 @@ main(int argc,char ** argv)
 		if(remote_port < 0 || remote_port > 65535)
 		{
 			if(!args.Quiet)
-				Printf("%s: Remote port number %ld is out of range; valid range is 1..65535, default is 69.\n","TFTPClient",remote_port);
+				FPrintf(error_output, "%s: Remote port number %ld is out of range; valid range is 1..65535, default is 69.\n","TFTPClient",remote_port);
 
 			goto out;
 		}
@@ -351,7 +351,7 @@ main(int argc,char ** argv)
 	if((*from_path) == '\0')
 	{
 		if(!args.Quiet)
-			Printf("%s: FROM argument \"%s\" must include a file name.\n","TFTPClient", args.Source);
+			FPrintf(error_output, "%s: FROM argument \"%s\" must include a file name.\n","TFTPClient", args.Source);
 
 		goto out;
 	}
@@ -370,7 +370,7 @@ main(int argc,char ** argv)
 	if(to_ipv4_address == 0xFFFFFFFFUL)
 	{
 		if(!args.Quiet)
-			Printf("%s: '%s' is not a valid IPv4 destination address.\n","TFTPClient",args.Destination);
+			FPrintf(error_output, "%s: '%s' is not a valid IPv4 destination address.\n","TFTPClient",args.Destination);
 
 		goto out;
 	}
@@ -378,7 +378,7 @@ main(int argc,char ** argv)
 	if(from_ipv4_address != 0 && to_ipv4_address != 0)
 	{
 		if(!args.Quiet)
-			Printf("%s: Please provide a source or destination IPv4 address, but not both.\n","TFTPClient");
+			FPrintf(error_output, "%s: Please provide a source or destination IPv4 address, but not both.\n","TFTPClient");
 
 		goto out;
 	}
@@ -386,7 +386,7 @@ main(int argc,char ** argv)
 	if(from_ipv4_address == to_ipv4_address)
 	{
 		if(!args.Quiet)
-			Printf("%s: Please provide either a source or destination IPv4 address.\n","TFTPClient");
+			FPrintf(error_output, "%s: Please provide either a source or destination IPv4 address.\n","TFTPClient");
 
 		goto out;
 	}
@@ -468,7 +468,7 @@ main(int argc,char ** argv)
 
 				Fault(IoErr(),NULL,error_message,sizeof(error_message));
 
-				Printf("%s: Could not open file \"%s\" for reading (%s).\n","TFTPClient",from_path,error_message);
+				FPrintf(error_output, "%s: Could not open file \"%s\" for reading (%s).\n","TFTPClient",from_path,error_message);
 			}
 
 			goto out;
@@ -503,7 +503,7 @@ main(int argc,char ** argv)
 
 						Fault(IoErr(),NULL,error_message,sizeof(error_message));
 
-						Printf("%s: Could not check if file \"%s\" exists (%s).\n","TFTPClient",to_path,error_message);
+						FPrintf(error_output, "%s: Could not check if file \"%s\" exists (%s).\n","TFTPClient",to_path,error_message);
 					}
 
 					goto out;
@@ -532,7 +532,7 @@ main(int argc,char ** argv)
 
 				Fault(IoErr(),NULL,error_message,sizeof(error_message));
 
-				Printf("%s: Could not open file \"%s\" for writing (%s).\n","TFTPClient",to_path,error_message);
+				FPrintf(error_output, "%s: Could not open file \"%s\" for writing (%s).\n","TFTPClient",to_path,error_message);
 			}
 
 			goto out;
@@ -694,7 +694,7 @@ main(int argc,char ** argv)
 										memmove(message_buffer,tftp->th_msg,message_length);
 										message_buffer[message_length] = '\0';
 
-										Printf("%s: Server responded with error '%s', \"%s\".\n","TFTPClient",error_text,message_buffer);
+										FPrintf(error_output, "%s: Server responded with error '%s', \"%s\".\n","TFTPClient",error_text,message_buffer);
 									}
 
 									result = RETURN_ERROR;
@@ -747,7 +747,7 @@ main(int argc,char ** argv)
 													Fault(IoErr(),NULL,error_message,sizeof(error_message));
 
 													if(!args.Quiet)
-														Printf("%s: Error writing to file \"%s\" (%s).\n","TFTPClient",to_path,error_message);
+														FPrintf(error_output, "%s: Error writing to file \"%s\" (%s).\n","TFTPClient",to_path,error_message);
 
 													send_tftp_error(TFTP_ERROR_UNDEF,"Error writing to file",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -811,7 +811,7 @@ main(int argc,char ** argv)
 													Fault(IoErr(),NULL,error_message,sizeof(error_message));
 
 													if(!args.Quiet)
-														Printf("%s: Error writing to file \"%s\" (%s).\n","TFTPClient",to_path,error_message);
+														FPrintf(error_output, "%s: Error writing to file \"%s\" (%s).\n","TFTPClient",to_path,error_message);
 
 													send_tftp_error(TFTP_ERROR_UNDEF,"Error writing to file",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -897,7 +897,7 @@ main(int argc,char ** argv)
 
 													Fault(IoErr(),NULL,error_message,sizeof(error_message));
 
-													Printf("%s: Error reading from file \"%s\" (%s).\n","TFTPClient",from_path,error_message);
+													FPrintf(error_output, "%s: Error reading from file \"%s\" (%s).\n","TFTPClient",from_path,error_message);
 												}
 
 												send_tftp_error(TFTP_ERROR_UNDEF,"Error reading from file",client_udp_port_number,server_udp_port_number,tftp_packet);
@@ -977,7 +977,7 @@ main(int argc,char ** argv)
 
 													Fault(IoErr(),NULL,error_message,sizeof(error_message));
 
-													Printf("%s: Error reading from file \"%s\" (%s).\n","TFTPClient",from_path,error_message);
+													FPrintf(error_output, "%s: Error reading from file \"%s\" (%s).\n","TFTPClient",from_path,error_message);
 												}
 
 												send_tftp_error(TFTP_ERROR_UNDEF,"Error reading from file",client_udp_port_number,server_udp_port_number,tftp_packet);

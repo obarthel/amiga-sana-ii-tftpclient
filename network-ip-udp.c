@@ -54,6 +54,7 @@
 
 /****************************************************************************/
 
+#include "macros.h"
 #include "assert.h"
 
 /****************************************************************************/
@@ -319,7 +320,10 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 	struct udphdr * udp;
 	struct ip * ip;
 	struct udp_pseudo_header * udp_pseudo_header;
+	LONG error;
 	int len;
+
+	ENTER();
 
 	ASSERT( write_request->nior_BufferSize > 540 );
 	ASSERT( data_length <= write_request->nior_BufferSize );
@@ -415,7 +419,12 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 	}
 	#endif /* TESTING */
 
-	return(DoIO((struct IORequest *)write_request));
+	ASSERT( NOT write_request->nior_InUse );
+
+	error = DoIO((struct IORequest *)write_request);
+
+	RETURN(error);
+	return(error);
 }
 
 /****************************************************************************/

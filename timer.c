@@ -41,9 +41,13 @@
 
 #define __USE_INLINE__
 #include <proto/exec.h>
+#include <proto/dos.h>
+
+#include <stdio.h>
 
 /****************************************************************************/
 
+#include "error-codes.h"
 #include "timer.h"
 
 /****************************************************************************/
@@ -114,20 +118,48 @@ start_time(ULONG seconds)
 
 /* This initializes the interval timer. */
 int
-timer_setup(void)
+timer_setup(BPTR error_output, const struct cmd_args * args)
 {
+	const char * error_text;
+	char other_error_text[100];
 	int result = FAILURE;
+	LONG error;
 
 	time_port = CreateMsgPort();
 	if(time_port == NULL)
+	{
+		if(!args->Quiet)
+			PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
+
 		goto out;
+	}
 
 	time_request = (struct timerequest *)CreateIORequest(time_port, sizeof(*time_request));
 	if(time_request == NULL)
-		goto out;
+	{
+		if(!args->Quiet)
+			PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
 
-	if(OpenDevice(TIMERNAME,UNIT_VBLANK,(struct IORequest *)time_request,0) != OK)
 		goto out;
+	}
+
+	error = OpenDevice(TIMERNAME,UNIT_VBLANK,(struct IORequest *)time_request,0);
+	if(error != OK)
+	{
+		if(!args->Quiet)
+		{
+			error_text = get_io_error_text(error);
+			if(error_text == NULL)
+			{
+				sprintf(other_error_text,"error=%d",error);
+				error_text = other_error_text;
+			}
+
+			FPrintf(error_output,"%s: Cannot open \"%s\" unit %ld (%ls).\n","TFTPClient",TIMERNAME,UNIT_VBLANK,error_text);
+		}
+
+		goto out;
+	}
 
 	result = OK;
 

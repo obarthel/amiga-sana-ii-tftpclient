@@ -46,6 +46,16 @@
 #include <devices/timer.h>
 #endif /* DEVICES_TIMER_H */
 
+#ifndef DOS_DOS_H
+#include <dos/dos.h>
+#endif /* DOS_DOS_H */
+
+/****************************************************************************/
+
+#ifndef _ARGS_H
+#include "args.h"
+#endif /* _ARGS_H */
+
 /****************************************************************************/
 
 extern struct MsgPort *		time_port;
@@ -56,7 +66,7 @@ extern BOOL					time_in_use;
 
 extern void stop_time(void);
 extern void start_time(ULONG seconds);
-extern int timer_setup(void);
+extern int timer_setup(BPTR error_output, const struct cmd_args * args);
 extern void timer_cleanup(void);
 
 /****************************************************************************/

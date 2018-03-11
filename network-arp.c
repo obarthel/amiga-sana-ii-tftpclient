@@ -53,6 +53,7 @@
 
 /****************************************************************************/
 
+#include "macros.h"
 #include "assert.h"
 
 /****************************************************************************/
@@ -65,6 +66,9 @@ LONG
 send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_address)
 {
 	struct ARPHeaderEthernet * ahe = write_request->nior_Buffer;
+	LONG error;
+
+	ENTER();
 
 	ASSERT( sizeof(*ahe) <= write_request->nior_BufferSize );
 
@@ -120,7 +124,12 @@ send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_addres
 	}
 	#endif /* TESTING */
 
-	return(DoIO((struct IORequest *)write_request));
+	ASSERT( NOT write_request->nior_InUse );
+
+	error = DoIO((struct IORequest *)write_request);
+
+	RETURN(error);
+	return(error);
 }
 
 /****************************************************************************/
@@ -189,6 +198,8 @@ broadcast_arp_query(ULONG target_ipv4_address)
 		}
 	}
 	#endif /* TESTING */
+
+	ASSERT( NOT write_request->nior_InUse );
 
 	error = DoIO((struct IORequest *)write_request);
 

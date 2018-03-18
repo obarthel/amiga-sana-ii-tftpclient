@@ -345,7 +345,13 @@ NiceOpenDevice(STRPTR name,LONG unit,struct IORequest *ior,LONG flags)
 /****************************************************************************/
 
 /* Copy from the network device transmit buffer to the network I/O
- * request buffer. This is what the CMD_READ command uses.
+ * request buffer. This is what the CMD_WRITE, S2_MULTICAST and S2_BROADCAST
+ * commands use.
+ *
+ * The buffer referred to in the "sana2_byte_copy_from_buff" function name
+ * is the client's buffer. Hence, this function copies from the client's
+ * buffer to the network driver's buffer so that the driver may transmit the
+ * data.
  */
 static LONG ASM SAVE_DS
 sana2_byte_copy_from_buff(
@@ -383,7 +389,12 @@ sana2_byte_copy_from_buff(
 }
 
 /* Copy to the network device transmit buffer from the network I/O
- * request buffer. This is what CMD_WRITE and S2_BROADCAST commands use.
+ * request buffer. This is what the CMD_READ and S2_READORPHAN
+ * commands use.
+ *
+ * The buffer referred to in the "sana2_byte_copy_to_buff" function name
+ * is the client's buffer. Hence, this function copies data received
+ * by the network driver to the client's buffer.
  */
 static LONG ASM SAVE_DS
 sana2_byte_copy_to_buff(
@@ -415,6 +426,101 @@ sana2_byte_copy_to_buff(
 	{
 		result = FALSE;
 	}
+
+	RETURN(result);
+	return(result);
+}
+
+/****************************************************************************/
+
+/* Attempt to return the client's buffer address so that the network driver
+ * may transmit its contents. This is what the CMD_WRITE, S2_MULTICAST and
+ * S2_BROADCAST commands may use.
+ *
+ * Returns the address of the client's buffer if it matches the alignment
+ * requirements; NULL otherwise.
+ */
+static APTR ASM SAVE_DS
+sana2_dma_copy_from_buff32(REG(a0,const struct NetIORequest * from))
+{
+	APTR result = NULL;
+
+	ENTER();
+
+	SHOWPOINTER((APTR)from);
+
+	ASSERT( from != NULL );
+	ASSERT( from->nior_IOS2.ios2_Req.io_Device != NULL );
+
+	/* The buffer address must be a multiple of 4 (32 bit
+	 * alignment). We bail if this is not case, or if the
+	 * buffer address is invalid.
+	 */
+	if((((ULONG)from->nior_Buffer) % 4) != 0 || from->nior_Buffer == NULL)
+		goto out;
+
+	result = from->nior_Buffer;
+
+ out:
+
+	RETURN(result);
+	return(result);
+}
+
+/* Attempt to return the client's buffer address so that the network
+ * driver may fill it with data being received. This is what the CMD_READ
+ * and S2_READORPHAN commands may use.
+ *
+ * Returns the address of the client's buffer if it matches the alignment
+ * requirements and if the size of the buffer is large enough to hold
+ * the number of data bytes which the network driver may want to store
+ * there; NULL otherwise.
+ */
+static APTR ASM SAVE_DS
+sana2_dma_copy_to_buff32(REG(a0,const struct NetIORequest * to))
+{
+	ULONG n, remaining_bytes;
+	APTR result = NULL;
+
+	ENTER();
+
+	SHOWPOINTER((APTR)to);
+
+	ASSERT( to != NULL );
+	ASSERT( to->nior_IOS2.ios2_Req.io_Device != NULL );
+
+	/* How much data the driver may want to store in the buffer is
+	 * given in to->nior_IOS2.ios2_DataLength. We must round this
+	 * up to a multiple of 4 (32 bit alignment) to make sure that
+	 * we have that much space in the buffer.
+	 */
+	n = to->nior_IOS2.ios2_DataLength;
+
+	remaining_bytes = 4 - (n % 4);
+	if(remaining_bytes < 4)
+	{
+		/* Paranoia: avoid an overflow. */
+		if(n + remaining_bytes > n)
+			n += remaining_bytes;
+	}
+
+	/* The client buffer must be large enough to store
+	 * as many bytes as the driver may want to. We
+	 * bail out if this is not the case.
+	 */
+	if(n > to->nior_BufferSize)
+		goto out;
+
+	/* The buffer address must be a multiple of 4 (32 bit
+	 * alignment). We bail if this is not case, or if the
+	 * buffer address is invalid.
+	 */
+	if((((ULONG)to->nior_Buffer) % 4) != 0 || to->nior_Buffer == NULL)
+		goto out;
+
+	result = to->nior_Buffer;
+
+ out:
 
 	RETURN(result);
 	return(result);
@@ -529,8 +635,10 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 {
 	static struct TagItem buffer_management[] =
 	{
-		{ S2_CopyFromBuff,	(ULONG)sana2_byte_copy_from_buff },
-		{ S2_CopyToBuff,	(ULONG)sana2_byte_copy_to_buff },
+		{ S2_CopyFromBuff,		(ULONG)sana2_byte_copy_from_buff },
+		{ S2_CopyToBuff,		(ULONG)sana2_byte_copy_to_buff },
+		{ S2_DMACopyFromBuff32,	(ULONG)sana2_dma_copy_from_buff32 },
+		{ S2_DMACopyToBuff32,	(ULONG)sana2_dma_copy_to_buff32 },
 
 		{ TAG_END, 0 }
 	};

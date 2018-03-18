@@ -179,6 +179,15 @@ device driver when needed and immediately closes it again as soon as it is
 no longer required. This may cause the driver to hang, and it may even
 crash the system.
 
+All SANA-II compliant network drivers must support the buffer management
+functions which are provided by the client at `OpenDevice()` time, namely the
+functions associated with the `S2_CopyFromBuff` and `S2_CopyToBuff` tags.
+Some drivers will, however, fail to work correctly unless the `S2_SANA2HOOK`
+command is used and a hook function is installed. The TFTPClient will
+provide such a hook function for the sake of convenience and stability.
+Testing revealed at least one AmigaOS4 driver which will cause both the
+TFTPClient command and the driver itself to crash unless the hook function is provided.
+
 The TFTP protocol only supports sending and receiving files (see RFC 1350).
 It is not a generalized file transfer protocol such as FTP or SFTP and
 cannot be used interactively to, for example, list directory contents or

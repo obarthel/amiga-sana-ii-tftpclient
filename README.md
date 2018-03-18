@@ -16,8 +16,8 @@ FTP, HTTP or SSH protocols which need a complete TCP/IP stack to work.
 ## 2. Preparations
 
 This TFTP client program does not need a TCP/IP stack to work. More to the
-point, *DO NOT* use this program while a TCP/IP stack (/Roadshow/, /AmiTCP/,
-/Miami/, etc.) is currently running! You should not be running both a TCP/IP
+point, **do not** use this program while a TCP/IP stack (*Roadshow*, *AmiTCP*,
+*Miami*, etc.) is currently running! You should not be running both a TCP/IP
 stack and this TFTP client in parallel, because both will end up stealing
 packets which were really intended for the other guy.
 
@@ -150,7 +150,7 @@ in which it is running, or use the `"Break"` shell command.
 
 ## 4. Limitations
 
-It is not safe to use the TFTPClient command while a TCP/IP stack or /Envoy/
+It is not safe to use the TFTPClient command while a TCP/IP stack or *Envoy*
 is currently running and using the same network device driver as TFTPClient.
 If you still want to give it a try, be prepared for the whole transmission
 to take much longer because TFTPClient and the TCP/IP stack will end up

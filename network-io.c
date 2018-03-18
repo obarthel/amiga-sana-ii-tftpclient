@@ -626,6 +626,54 @@ network_cleanup(void)
 
 /****************************************************************************/
 
+/* Some network device drivers may prefer to call this hook function rather
+ * to call the buffer management functions provided at OpenDevice() time.
+ */
+static LONG ASM SAVE_DS
+sana2_hook_function(
+	REG(a0,struct Hook *				hook),
+	REG(a2,struct NetIORequest *		sana2req),
+	REG(a1,struct SANA2CopyHookMsg *	schm))
+{
+	LONG result;
+
+	/* Which operation should be performed? We just look up what is
+	 * called for, then directly call the corresponding "traditional"
+	 * SANA-II buffer management function.
+	 */
+	switch(schm->schm_Method)
+	{
+		case S2_CopyToBuff:
+
+			result = sana2_byte_copy_to_buff(sana2req,schm->schm_From,schm->schm_Size);
+			break;
+
+		case S2_CopyFromBuff:
+
+			result = sana2_byte_copy_from_buff(schm->schm_To,sana2req,schm->schm_Size);
+			break;
+
+		case S2_DMACopyToBuff32:
+
+			result = (LONG)sana2_dma_copy_to_buff32(sana2req);
+			break;
+
+		case S2_DMACopyFromBuff32:
+
+			result = (LONG)sana2_dma_copy_from_buff32(sana2req);
+			break;
+
+		default:
+
+			result = 0;
+			break;
+	}
+
+	return(result);
+}
+
+/****************************************************************************/
+
 /* Initialize the network I/O operations, allocating SANA-II I/O requests,
  * opening the network device driver, etc. Returns 0 on success,
  * and -1 on failure.
@@ -642,6 +690,18 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 
 		{ TAG_END, 0 }
 	};
+
+	static Tag hook_capabilities[] =
+	{
+		S2_CopyToBuff,
+		S2_CopyFromBuff,
+		S2_DMACopyToBuff32,
+		S2_DMACopyFromBuff32,
+
+		TAG_END
+	};
+
+	static struct Sana2Hook sana2_hook;
 
 	struct Sana2DeviceQuery s2dq;
 	const char * error_text;
@@ -748,6 +808,22 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 
 		goto out;
 	}
+
+	/* The network driver may prefer to call a hook function instead
+	 * of using the supplied buffer management functions. We merely
+	 * provide the hook as a convenience and do not require it to be
+	 * used. The network driver should have refused to open if it
+	 * did not support the "traditional" SANA-II buffer management
+	 * functions.
+	 */
+	sana2_hook.s2h_Hook.h_Entry	= (HOOKFUNC)sana2_hook_function;
+	sana2_hook.s2h_Methods		= hook_capabilities;
+
+	control_request->nior_IOS2.ios2_Req.io_Command	= S2_SANA2HOOK;
+	control_request->nior_IOS2.ios2_Data			= &sana2_hook;
+	control_request->nior_IOS2.ios2_DataLength		= sizeof(sana2_hook);
+
+	DoIO((struct IORequest *)control_request);
 
 	/* Find out which type of networking hardware the driver is responsible
 	 * for, and how large the transmission buffer may be.

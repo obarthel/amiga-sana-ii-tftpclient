@@ -174,7 +174,7 @@ Some network device drivers cannot be used safely with the TFTPClient command
 because they do not handle opening and closing robustly. This may occur, for
 example, for the `"a2065.device"` driver. Typically, network device drivers are
 opened only once and then remain in use indefinitely by the TCP/IP stack or
-by Envoy. The TFTPClient command, however, opens the respective network
+by *Envoy*. The TFTPClient command, however, opens the respective network
 device driver when needed and immediately closes it again as soon as it is
 no longer required. This may cause the driver to hang, and it may even
 crash the system.

@@ -637,6 +637,11 @@ sana2_hook_function(
 {
 	LONG result;
 
+	ENTER();
+	
+	ASSERT( sana2req != NULL );
+	ASSERT( schm != NULL );
+
 	/* Which operation should be performed? We just look up what is
 	 * called for, then directly call the corresponding "traditional"
 	 * SANA-II buffer management function.
@@ -645,30 +650,41 @@ sana2_hook_function(
 	{
 		case S2_CopyToBuff:
 
+			SHOWMSG("S2_CopyToBuff");
+
 			result = sana2_byte_copy_to_buff(sana2req,schm->schm_From,schm->schm_Size);
 			break;
 
 		case S2_CopyFromBuff:
+
+			SHOWMSG("S2_CopyFromBuff");
 
 			result = sana2_byte_copy_from_buff(schm->schm_To,sana2req,schm->schm_Size);
 			break;
 
 		case S2_DMACopyToBuff32:
 
+			SHOWMSG("S2_DMACopyToBuff32");
+
 			result = (LONG)sana2_dma_copy_to_buff32(sana2req);
 			break;
 
 		case S2_DMACopyFromBuff32:
 
+			SHOWMSG("S2_DMACopyFromBuff32");
+
 			result = (LONG)sana2_dma_copy_from_buff32(sana2req);
 			break;
 
 		default:
+		
+			D(("unsupported method %ld (0x%08lx)", schm->schm_Method, schm->schm_Method));
 
 			result = 0;
 			break;
 	}
 
+	RETURN(result);
 	return(result);
 }
 
@@ -791,6 +807,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 
 	control_request->nior_IOS2.ios2_BufferManagement = buffer_management;
 
+	D(("open '%s', unit %ld", args->DeviceName,(*args->DeviceUnit)));
+
 	error = NiceOpenDevice(args->DeviceName,(*args->DeviceUnit),(struct IORequest *)control_request, 0);
 	if(error != OK)
 	{
@@ -823,6 +841,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	control_request->nior_IOS2.ios2_Data			= &sana2_hook;
 	control_request->nior_IOS2.ios2_DataLength		= sizeof(sana2_hook);
 
+	SHOWMSG("setting up optional S2_SANA2HOOK");
+
 	DoIO((struct IORequest *)control_request);
 
 	/* Find out which type of networking hardware the driver is responsible
@@ -842,6 +862,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	s2dq.SizeAvailable = sizeof(s2dq) - sizeof(s2dq.RawMTU);
 
 	ASSERT( NOT control_request->nior_InUse );
+
+	SHOWMSG("performing S2_DEVICEQUERY");
 
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)
@@ -910,6 +932,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 
 	ASSERT( NOT control_request->nior_InUse );
 
+	SHOWMSG("performing S2_GETSTATIONADDRESS");
+
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)
 	{
@@ -956,6 +980,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 
 	ASSERT( NOT control_request->nior_InUse );
 
+	SHOWMSG("performing S2_CONFIGINTERFACE");
+
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK && control_request->nior_IOS2.ios2_WireError != S2WERR_IS_CONFIGURED)
 	{
@@ -995,6 +1021,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	if(error == OK)
 		memmove(local_ethernet_address,default_ethernet_address,sizeof(local_ethernet_address));
 
+	SHOWMSG("duplicating I/O request for write operations");
+
 	write_request = duplicate_net_request(control_request, NULL, buffer_size);
 	if(write_request == NULL)
 	{
@@ -1003,6 +1031,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 
 		goto out;
 	}
+
+	SHOWMSG("duplicating I/O request for ARP packets");
 
 	/* We set up four ARP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 4 ; i++)
@@ -1018,6 +1048,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 
 		send_net_io_read_request(read_request,ETHERTYPE_ARP);
 	}
+
+	SHOWMSG("duplicating I/O request for IP packets");
 
 	/* We set up eight IP read requests and start them (asynchronously). */
 	for(i = 0 ; i < 8 ; i++)

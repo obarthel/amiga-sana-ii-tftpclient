@@ -235,6 +235,9 @@ main(int argc,char ** argv)
 	LONG total_num_bytes_transferred = 0;
 	const struct Process * this_process = (struct Process *)FindTask(NULL);
 	BPTR error_output = this_process->pr_CES != (BPTR)NULL ? this_process->pr_CES : Output();
+	char ipv4_address[20];
+	const char * from_computer;
+	const char * to_computer;
 
 	SETDEBUGLEVEL(DEBUGLEVEL_CallTracing);
 
@@ -420,41 +423,44 @@ main(int argc,char ** argv)
 	if(setup(error_output, &args) < 0)
 		goto out;
 
+	if(from_ipv4_address == 0)
+	{
+		sprintf(ipv4_address,"%lu.%lu.%lu.%lu",
+			(to_ipv4_address >> 24) & 0xff,
+			(to_ipv4_address >> 16) & 0xff,
+			(to_ipv4_address >>  8) & 0xff,
+			 to_ipv4_address        & 0xff);
+
+		from_computer	= "this computer";
+		to_computer		= ipv4_address;
+	}
+	else
+	{
+		sprintf(ipv4_address,"%lu.%lu.%lu.%lu",
+			(from_ipv4_address >> 24) & 0xff,
+			(from_ipv4_address >> 16) & 0xff,
+			(from_ipv4_address >>  8) & 0xff,
+			 from_ipv4_address        & 0xff);
+
+		from_computer	= ipv4_address;
+		to_computer		= "this computer";
+	}
+
 	if(args.Verbose)
 	{
-		char ipv4_address[20];
-		const char * from_computer;
-		const char * to_computer;
-
-		if(from_ipv4_address == 0)
-		{
-			sprintf(ipv4_address,"%lu.%lu.%lu.%lu",
-				(to_ipv4_address >> 24) & 0xff,
-				(to_ipv4_address >> 16) & 0xff,
-				(to_ipv4_address >>  8) & 0xff,
-				 to_ipv4_address        & 0xff);
-
-			from_computer	= "this computer";
-			to_computer		= ipv4_address;
-		}
-		else
-		{
-			sprintf(ipv4_address,"%lu.%lu.%lu.%lu",
-				(from_ipv4_address >> 24) & 0xff,
-				(from_ipv4_address >> 16) & 0xff,
-				(from_ipv4_address >>  8) & 0xff,
-				 from_ipv4_address        & 0xff);
-
-			from_computer	= ipv4_address;
-			to_computer		= "this computer";
-		}
-
 		Printf("Copy \"%s\" (%s) to \"%s\" (%s)\n",
 			from_path,
 			from_computer,
 			to_path,
 			to_computer);
 	}
+
+	D(("Will copy \"%s\" (%s) to \"%s\" (%s).",
+		from_path,
+		from_computer,
+		to_path,
+		to_computer
+	));
 
 	/* We are sending a file? */
 	if(from_ipv4_address == 0)
@@ -473,6 +479,8 @@ main(int argc,char ** argv)
 
 			goto out;
 		}
+
+		D(("Opened '%s' for reading.", from_path));
 
 		/* Use a read buffer. */
 		SetVBuf(source_file,NULL,BUF_FULL,8192);
@@ -537,6 +545,8 @@ main(int argc,char ** argv)
 
 			goto out;
 		}
+		
+		D(("Opened '%s' for writing.", to_path));
 
 		/* Use a write buffer. */
 		SetVBuf(destination_file,NULL,BUF_FULL,8192);
@@ -565,10 +575,15 @@ main(int argc,char ** argv)
 	if(args.Verbose)
 		Printf("Sending ARP query...\n");
 
+	SHOWMSG("Sending ARP query");
+
 	/* We need to know the Ethernet address corresponding to the IPv4
 	 * address of the remote TFTP server.
 	 */
 	broadcast_arp_query(remote_ipv4_address);
+
+	D(("starting the timer"));
+
 	start_time(1);
 
 	time_signal_mask	= (1UL << time_port->mp_SigBit);
@@ -603,7 +618,7 @@ main(int argc,char ** argv)
 			read_request = (struct NetIORequest *)GetMsg(net_read_port);
 			
 			if(read_request != NULL)
-				D(("read request 0x%08lx has returned", read_request));
+				D(("Read request 0x%08lx has returned.", read_request));
 
 			#if defined(TESTING)
 			{
@@ -672,30 +687,30 @@ main(int argc,char ** argv)
 								/* Server responded with an error? We print the error message and abort. */
 								if (tftp->th_opcode == TFTP_PACKET_ERROR)
 								{
-									if(!args.Quiet)
+									const char * error_text;
+									char number[20];
+									char message_buffer[SEGSIZE+1];
+									int message_length;
+
+									error_text = get_tftp_error_text(tftp->th_code);
+									if(error_text == NULL)
 									{
-										const char * error_text;
-										char number[20];
-										char message_buffer[SEGSIZE+1];
-										int message_length;
-
-										error_text = get_tftp_error_text(tftp->th_code);
-										if(error_text == NULL)
-										{
-											sprintf(number,"error %d",tftp->th_code);
-											error_text = number;
-										}
-
-										message_length = length - offsetof(struct tftphdr, th_msg);
-
-										ASSERT( message_length >= 0 );
-										ASSERT( message_length < (int)sizeof(message_buffer) );
-
-										memmove(message_buffer,tftp->th_msg,message_length);
-										message_buffer[message_length] = '\0';
-
-										FPrintf(error_output, "%s: Server responded with error '%s', \"%s\".\n","TFTPClient",error_text,message_buffer);
+										sprintf(number,"error %d",tftp->th_code);
+										error_text = number;
 									}
+
+									message_length = length - offsetof(struct tftphdr, th_msg);
+
+									ASSERT( message_length >= 0 );
+									ASSERT( message_length < (int)sizeof(message_buffer) );
+
+									memmove(message_buffer,tftp->th_msg,message_length);
+									message_buffer[message_length] = '\0';
+
+									if(!args.Quiet)
+										FPrintf(error_output, "%s: Server responded with error '%s', \"%s\".\n","TFTPClient",error_text,message_buffer);
+
+									D(("Server responded with error '%s', '%s'.",error_text,message_buffer));
 
 									result = RETURN_ERROR;
 									goto out;
@@ -713,6 +728,8 @@ main(int argc,char ** argv)
 											Printf("Data packet size (%ld bytes) is larger than expected; keeping only the first %ld bytes.\n",
 												payload_length, SEGSIZE);
 										}
+										
+										D(("Data packet size (%ld bytes) is larger than expected; keeping only the first %ld bytes.",payload_length, SEGSIZE));
 
 										payload_length = SEGSIZE;
 									}
@@ -732,11 +749,15 @@ main(int argc,char ** argv)
 											if(args.Verbose)
 												Printf("Server has acknowledged the read request (using UDP port number %ld).\n", server_udp_port_number);
 
+											D(("Server has acknowledged the read request (using UDP port number %ld).", server_udp_port_number));
+
 											/* Store the data, if any. */
 											if(payload_length > 0)
 											{
 												if(args.Verbose)
 													Printf("Writing block #%ld (%ld bytes).\n",tftp->th_block,payload_length);
+
+												D(("Writing block #%ld (%ld bytes).",tftp->th_block,payload_length));
 
 												SetIoErr(0);
 
@@ -748,6 +769,8 @@ main(int argc,char ** argv)
 
 													if(!args.Quiet)
 														FPrintf(error_output, "%s: Error writing to file \"%s\" (%s).\n","TFTPClient",to_path,error_message);
+
+													D(("Error writing to file '%s' (%s).",to_path,error_message));
 
 													send_tftp_error(TFTP_ERROR_UNDEF,"Error writing to file",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -775,6 +798,8 @@ main(int argc,char ** argv)
 											if(args.Verbose)
 												Printf("Acknowledging receipt of block #%ld.\n",block_number-1);
 
+											D(("Acknowledging receipt of block #%ld.",block_number-1));
+
 											send_tftp_acknowledgement(block_number-1,client_udp_port_number,server_udp_port_number,tftp_packet);
 
 											/* Restart the timer; make sure that we won't try to
@@ -782,12 +807,17 @@ main(int argc,char ** argv)
 											 * be trouble.
 											 */
 											signals_received &= ~time_signal_mask;
+
+											D(("starting the timer"));
+
 											start_time(1);
 										}
 										else
 										{
 											if(args.Verbose)
 												Printf("Ignoring receipt of block #%ld.\n",tftp->th_block);
+											
+											D(("Ignoring receipt of block #%ld.",tftp->th_block));
 										}
 									}
 									/* Are we already receiving data to be written? */
@@ -802,6 +832,8 @@ main(int argc,char ** argv)
 												if(args.Verbose)
 													Printf("Writing block #%ld (%ld bytes).\n",tftp->th_block,payload_length);
 
+												D(("Writing block #%ld (%ld bytes).",tftp->th_block,payload_length));
+
 												SetIoErr(0);
 
 												if(FWrite(destination_file,(APTR)tftp->th_data,payload_length,1) == 0)
@@ -812,6 +844,8 @@ main(int argc,char ** argv)
 
 													if(!args.Quiet)
 														FPrintf(error_output, "%s: Error writing to file \"%s\" (%s).\n","TFTPClient",to_path,error_message);
+													
+													D(("Error writing to file '%s' (%s).",to_path,error_message));
 
 													send_tftp_error(TFTP_ERROR_UNDEF,"Error writing to file",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -836,6 +870,8 @@ main(int argc,char ** argv)
 
 											if(args.Verbose)
 												Printf("Acknowledging receipt of block #%ld.\n",block_number-1);
+											
+											D(("Acknowledging receipt of block #%ld.",block_number-1));
 
 											send_tftp_acknowledgement(block_number-1,client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -844,6 +880,9 @@ main(int argc,char ** argv)
 											 * be trouble.
 											 */
 											signals_received &= ~time_signal_mask;
+
+											D(("starting the timer"));
+
 											start_time(1);
 										}
 										/* No, this is the wrong block. */
@@ -851,12 +890,16 @@ main(int argc,char ** argv)
 										{
 											if(args.Verbose)
 												Printf("Ignoring receipt of block #%ld; was expecting block #%ld instead.\n",tftp->th_block,block_number);
+											
+											D(("Ignoring receipt of block #%ld; was expecting block #%ld instead.",tftp->th_block,block_number));
 										}
 									}
 									else
 									{
 										if(args.Verbose)
 											Printf("Ignoring receipt of unexpected data block #%ld.\n",tftp->th_block);
+										
+										D(("Ignoring receipt of unexpected data block #%ld.",tftp->th_block));
 									}
 								}
 								/* Server has acknowledged reception of data, or of the write request? */
@@ -878,6 +921,8 @@ main(int argc,char ** argv)
 
 											if(args.Verbose)
 												Printf("Server has acknowledged the write request (using UDP port number %ld).\n", server_udp_port_number);
+											
+											D(("Server has acknowledged the write request (using UDP port number %ld).", server_udp_port_number));
 
 											tftp_state = tftp_state_read_from_file;
 
@@ -885,20 +930,22 @@ main(int argc,char ** argv)
 
 											if(args.Verbose)
 												Printf("Reading block #%ld.\n",block_number);
+											
+											D(("Reading block #%ld.",block_number));
 
 											SetIoErr(0);
 
 											num_bytes_read = FRead(source_file,tftp_output->th_data,1,SEGSIZE);
 											if(num_bytes_read == 0 && IoErr() != 0)
 											{
+												TEXT error_message[256];
+
+												Fault(IoErr(),NULL,error_message,sizeof(error_message));
+
 												if(!args.Quiet)
-												{
-													TEXT error_message[256];
-
-													Fault(IoErr(),NULL,error_message,sizeof(error_message));
-
 													FPrintf(error_output, "%s: Error reading from file \"%s\" (%s).\n","TFTPClient",from_path,error_message);
-												}
+												
+												D(("Error reading from file '%s' (%s).",from_path,error_message));
 
 												send_tftp_error(TFTP_ERROR_UNDEF,"Error reading from file",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -915,6 +962,8 @@ main(int argc,char ** argv)
 
 												if(args.Verbose)
 													Printf("This is the last block to be read.\n");
+												
+												D(("This is the last block to be read."));
 											}
 
 											tftp_output->th_opcode	= TFTP_PACKET_DATA;
@@ -925,6 +974,8 @@ main(int argc,char ** argv)
 
 											if(args.Verbose)
 												Printf("Sending block #%ld (%ld bytes).\n",block_number,tftp_payload_length);
+											
+											D(("Sending block #%ld (%ld bytes).",block_number,tftp_payload_length));
 
 											send_udp(client_udp_port_number,server_udp_port_number,tftp_output,tftp_output_length);
 
@@ -933,12 +984,17 @@ main(int argc,char ** argv)
 											 * be trouble.
 											 */
 											signals_received &= ~time_signal_mask;
+
+											D(("starting the timer"));
+
 											start_time(1);
 										}
 										else
 										{
 											if(args.Verbose)
 												Printf("Ignoring receipt of acknowledgement for block #%ld.\n",tftp->th_block);
+											
+											D(("Ignoring receipt of acknowledgement for block #%ld.",tftp->th_block));
 										}
 									}
 									/* Could this be the response to the block we just sent to the server? */
@@ -954,6 +1010,8 @@ main(int argc,char ** argv)
 											{
 												if(args.Verbose)
 													Printf("Transmission completed.\n");
+												
+												D(("Transmission completed."));
 
 												break;
 											}
@@ -966,19 +1024,22 @@ main(int argc,char ** argv)
 												Printf("Reading block #%ld.\n",block_number);
 											}
 
+											D(("Server has acknowledged receipt of block #%ld.", block_number-1));
+											D(("Reading block #%ld.",block_number));
+
 											SetIoErr(0);
 
 											num_bytes_read = FRead(source_file,tftp_output->th_data,1,SEGSIZE);
 											if(num_bytes_read == 0 && IoErr() != 0)
 											{
+												TEXT error_message[256];
+
+												Fault(IoErr(),NULL,error_message,sizeof(error_message));
+
 												if(!args.Quiet)
-												{
-													TEXT error_message[256];
-
-													Fault(IoErr(),NULL,error_message,sizeof(error_message));
-
 													FPrintf(error_output, "%s: Error reading from file \"%s\" (%s).\n","TFTPClient",from_path,error_message);
-												}
+												
+												D(("Error reading from file '%s' (%s).",from_path,error_message));
 
 												send_tftp_error(TFTP_ERROR_UNDEF,"Error reading from file",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -998,6 +1059,8 @@ main(int argc,char ** argv)
 
 												if(args.Verbose)
 													Printf("This is the last block to be read.\n");
+												
+												D(("This is the last block to be read."));
 											}
 
 											tftp_output->th_opcode	= TFTP_PACKET_DATA;
@@ -1008,6 +1071,8 @@ main(int argc,char ** argv)
 
 											if(args.Verbose)
 												Printf("Sending block #%ld (%ld bytes).\n",block_number,tftp_payload_length);
+											
+											D(("Sending block #%ld (%ld bytes).",block_number,tftp_payload_length));
 
 											send_udp(client_udp_port_number,server_udp_port_number,tftp_output,tftp_output_length);
 
@@ -1016,18 +1081,25 @@ main(int argc,char ** argv)
 											 * be trouble.
 											 */
 											signals_received &= ~time_signal_mask;
+
+											D(("starting the timer"));
+
 											start_time(1);
 										}
 										else
 										{
 											if(args.Verbose)
 												Printf("Ignoring receipt of acknowledgement for block #%ld; was expecting block #%ld instead.\n",tftp->th_block,block_number);
+											
+											D(("Ignoring receipt of acknowledgement for block #%ld; was expecting block #%ld instead.",tftp->th_block,block_number));
 										}
 									}
 									else
 									{
 										if(args.Verbose)
 											Printf("Ignoring receipt of acknowledgement for block #%ld.\n",tftp->th_block);
+										
+										D(("Ignoring receipt of acknowledgement for block #%ld.",tftp->th_block));
 									}
 								}
 								/* This is an unsupported TFTP operation. We report the problem and then quit. */
@@ -1035,6 +1107,8 @@ main(int argc,char ** argv)
 								{
 									if(!args.Quiet)
 										FPrintf(error_output, "%s: Received unsupported TFTP operation %ld -- aborting.\n","TFTPClient",tftp->th_opcode);
+									
+									D(("Received unsupported TFTP operation %ld -- aborting.",tftp->th_opcode));
 
 									send_tftp_error(TFTP_ERROR_BADOP,"Huh?",client_udp_port_number,server_udp_port_number,tftp_packet);
 
@@ -1055,6 +1129,15 @@ main(int argc,char ** argv)
 									else
 										Printf("Ignoring UDP datagram.\n");
 								}
+
+								if (checksum != 0)
+									D(("Ignoring UDP datagram with incorrect checksum."));
+								else if (udp->uh_dport != client_udp_port_number)
+									D(("Ignoring UDP datagram sent to port %ld; expected port %ld.", udp->uh_dport, client_udp_port_number));
+								else if (server_udp_port_number_known && udp->uh_sport != server_udp_port_number)
+									D(("Ignoring UDP datagram sent by server from port %ld; expected port %ld.", udp->uh_sport, server_udp_port_number));
+								else
+									D(("Ignoring UDP datagram."));
 							}
 						}
 						/* Is this an ICMP message? Could be a "host unreachable" error. */
@@ -1075,84 +1158,83 @@ main(int argc,char ** argv)
 								if(icmp_header->type == icmp_type_unreach && NOT last_block_transmitted)
 								{
 									const struct icmp_unreachable_header * unreachable = (struct icmp_unreachable_header *)icmp_header;
+									const char * type;
+									char number[20];
+
+									switch(unreachable->header.code)
+									{
+										case icmp_code_unreach_net:
+
+											type = "bad network";
+											break;
+
+										case icmp_code_unreach_host:
+
+											type = "bad host";
+											break;
+
+										case icmp_code_unreach_protocol:
+
+											type = "bad protocol";
+											break;
+
+										case icmp_code_unreach_port:
+
+											type = "bad port";
+											break;
+
+										case icmp_code_unreach_needfrag:
+
+											type = "packet dropped due to fragmentation";
+											break;
+
+										case icmp_code_unreach_srcfail:
+
+											type = "source route failed";
+											break;
+
+										case icmp_code_unreach_net_unknown:
+
+											type = "unknown network";
+											break;
+
+										case icmp_code_unreach_host_unknown:
+
+											type = "unknown host";
+											break;
+
+										case icmp_code_unreach_isolated:
+
+											type = "source host isolated";
+											break;
+
+										case icmp_code_unreach_net_prohib:
+										case icmp_code_unreach_host_prohib:
+
+											type = "prohibited access";
+											break;
+
+										case icmp_code_unreach_tosnet:
+
+											type = "bad TOS for network";
+											break;
+
+										case icmp_code_unreach_toshost:
+
+											type = "bad TOS for host";
+											break;
+
+										default:
+
+											sprintf(number,"%d",unreachable->header.code);
+											type = number;
+											break;
+									}
 
 									if(args.Verbose)
-									{
-										const char * type;
-										char number[20];
-
-										switch(unreachable->header.code)
-										{
-											case icmp_code_unreach_net:
-
-												type = "bad network";
-												break;
-
-											case icmp_code_unreach_host:
-
-												type = "bad host";
-												break;
-
-											case icmp_code_unreach_protocol:
-
-												type = "bad protocol";
-												break;
-
-											case icmp_code_unreach_port:
-
-												type = "bad port";
-												break;
-
-											case icmp_code_unreach_needfrag:
-
-												type = "packet dropped due to fragmentation";
-												break;
-
-											case icmp_code_unreach_srcfail:
-
-												type = "source route failed";
-												break;
-
-											case icmp_code_unreach_net_unknown:
-
-												type = "unknown network";
-												break;
-
-											case icmp_code_unreach_host_unknown:
-
-												type = "unknown host";
-												break;
-
-											case icmp_code_unreach_isolated:
-
-												type = "source host isolated";
-												break;
-
-											case icmp_code_unreach_net_prohib:
-											case icmp_code_unreach_host_prohib:
-
-												type = "prohibited access";
-												break;
-
-											case icmp_code_unreach_tosnet:
-
-												type = "bad TOS for network";
-												break;
-
-											case icmp_code_unreach_toshost:
-
-												type = "bad TOS for host";
-												break;
-
-											default:
-
-												sprintf(number,"%d",unreachable->header.code);
-												type = number;
-												break;
-										}
-
 										FPrintf(error_output,"%s: Destination unreachable (%s) -- aborting.\n", "TFTPClient", type);
-									}
+									
+									D(("Destination unreachable (%s) -- aborting.", type));
 
 									result = RETURN_ERROR;
 									goto out;
@@ -1161,12 +1243,16 @@ main(int argc,char ** argv)
 								{
 									if(args.Verbose)
 										Printf("Ignoring ICMP datagram with code=%ld and type=%ld.\n", icmp_header->type, icmp_header->code);
+									
+									D(("Ignoring ICMP datagram with code=%ld and type=%ld.", icmp_header->type, icmp_header->code));
 								}
 							}
 							else
 							{
 								if(args.Verbose)
 									Printf("Ignoring ICMP datagram with incorrect checksum.\n");
+								
+								D(("Ignoring ICMP datagram with incorrect checksum."));
 							}
 						}
 						else
@@ -1176,12 +1262,17 @@ main(int argc,char ** argv)
 								Printf("Ignoring IP datagram (version=%ld, protocol=%ld; expected version=%ld, protocol=%ld).\n",
 									((ip->ip_v_hl >> 4) & 15), ip->ip_pr, IPVERSION, IPPROTO_UDP);
 							}
+
+							D(("Ignoring IP datagram (version=%ld, protocol=%ld; expected version=%ld, protocol=%ld).",
+								((ip->ip_v_hl >> 4) & 15), ip->ip_pr, IPVERSION, IPPROTO_UDP));
 						}
 					}
 					else
 					{
 						if(args.Verbose)
 							Printf("Ignoring IP datagram with incorrect checksum.\n");
+						
+						D(("Ignoring IP datagram with incorrect checksum."));
 					}
 				}
 				/* Is this an ARP packet? */
@@ -1208,6 +1299,8 @@ main(int argc,char ** argv)
 							{
 								if(args.Verbose)
 									Printf("Responding to ARP request.\n");
+								
+								D(("Responding to ARP request."));
 
 								send_arp_response(ahe->ahe_SenderProtocolAddress,ahe->ahe_SenderHardwareAddress);
 							}
@@ -1215,6 +1308,8 @@ main(int argc,char ** argv)
 							{
 								if(args.Verbose)
 									Printf("Ignoring ARP request; it's not for us.\n");
+								
+								D(("Ignoring ARP request; it's not for us."));
 							}
 						}
 						/* Is this a response to this client's query to provide the hardware
@@ -1226,6 +1321,8 @@ main(int argc,char ** argv)
 							{
 								if(args.Verbose)
 									Printf("Received ARP response.\n");
+								
+								D(("Received ARP response."));
 
 								/* Update the remote TFTP server Ethernet MAC address. */
 								memmove(remote_ethernet_address,ahe->ahe_SenderHardwareAddress,sizeof(remote_ethernet_address));
@@ -1239,6 +1336,8 @@ main(int argc,char ** argv)
 									if(args.Verbose)
 										Printf("Trying to begin transmission of file \"%s\".\n", local_filename);
 									
+									D(("Trying to begin transmission of file '%s'.", local_filename));
+									
 									tftp_state = (from_ipv4_address == 0) ? tftp_state_request_write : tftp_state_request_read;
 
 									start_tftp(tftp_state == tftp_state_request_write ? TFTP_PACKET_WRQ : TFTP_PACKET_RRQ,
@@ -1249,6 +1348,9 @@ main(int argc,char ** argv)
 									 * be trouble.
 									 */
 									signals_received &= ~time_signal_mask;
+
+									D(("starting the timer"));
+
 									start_time(1);
 								}
 							}
@@ -1256,18 +1358,24 @@ main(int argc,char ** argv)
 							{
 								if(args.Verbose)
 									Printf("Ignoring ARP response; it's not for us.\n");
+								
+								D(("Ignoring ARP response; it's not for us."));
 							}
 						}
 						else
 						{
 							if(args.Verbose)
 								Printf("Ignoring ARP packet with unsupported operation %ld.\n", ahe->ahe_Operation);
+							
+							D(("Ignoring ARP packet with unsupported operation %ld.", ahe->ahe_Operation));
 						}
 					}
 					else
 					{
 						if(args.Verbose)
 							Printf("Ignoring ARP packet.\n");
+						
+						D(("Ignoring ARP packet."));
 					}
 				}
 
@@ -1294,6 +1402,8 @@ main(int argc,char ** argv)
 				{
 					if(args.Verbose)
 						FPrintf(error_output, "%s: No response to ARP query received -- aborting.\n","TFTPClient");
+					
+					D(("No response to ARP query received -- aborting."));
 
 					result = RETURN_ERROR;
 					goto out;
@@ -1301,10 +1411,14 @@ main(int argc,char ** argv)
 
 				if(args.Verbose)
 					Printf("Repeating ARP query...\n");
+				
+				D(("Repeating ARP query."));
 
 				broadcast_arp_query(remote_ipv4_address);
 
 				num_arp_resolution_attempts--;
+
+				D(("starting the timer"));
 
 				start_time(1);
 			}
@@ -1314,8 +1428,12 @@ main(int argc,char ** argv)
 				if(args.Verbose)
 					Printf("Trying to begin transmission of file \"%s\" again.\n", local_filename);
 				
+				D(("Trying to begin transmission of file '%s' again.", local_filename));
+				
 				start_tftp(tftp_state == tftp_state_request_write ? TFTP_PACKET_WRQ : TFTP_PACKET_RRQ,
 					remote_filename,client_udp_port_number,server_udp_port_number,tftp_packet);
+
+				D(("starting the timer"));
 
 				start_time(1);
 			}
@@ -1324,8 +1442,12 @@ main(int argc,char ** argv)
 			{
 				if(args.Verbose)
 					Printf("Sending block #%ld again (%ld bytes).\n",block_number,tftp_payload_length);
+				
+				D(("Sending block #%ld again (%ld bytes).",block_number,tftp_payload_length));
 
 				send_udp(client_udp_port_number,server_udp_port_number,tftp_output,tftp_output_length);
+
+				D(("starting the timer"));
 
 				start_time(1);
 			}
@@ -1339,6 +1461,8 @@ main(int argc,char ** argv)
 					{
 						if(args.Verbose)
 							Printf("Transmission completed.\n");
+						
+						D(("Transmission completed."));
 
 						break;
 					}
@@ -1346,8 +1470,12 @@ main(int argc,char ** argv)
 
 				if(args.Verbose)
 					Printf("Acknowledging receipt of block #%ld again.\n",block_number-1);
+				
+				D(("Acknowledging receipt of block #%ld again.",block_number-1));
 
 				send_tftp_acknowledgement(block_number-1,client_udp_port_number,server_udp_port_number,tftp_packet);
+
+				D(("starting the timer"));
 
 				start_time(1);
 			}
@@ -1362,6 +1490,8 @@ main(int argc,char ** argv)
 
 	if(args.Verbose)
 		Printf("A total of %ld bytes were transmitted.\n",total_num_bytes_transferred);
+	
+	D(("A total of %ld bytes were transmitted.",total_num_bytes_transferred));
 
 	cleanup();
 

@@ -232,7 +232,10 @@ delete_net_request(struct NetIORequest * nior)
  * and allocating a new data buffer if desired.
  */
 static struct NetIORequest *
-duplicate_net_request(const struct NetIORequest * orig, struct MsgPort * reply_port, ULONG buffer_size)
+duplicate_net_request(
+	const struct NetIORequest *	orig,
+	struct MsgPort *			reply_port,
+	ULONG						buffer_size)
 {
 	struct NetIORequest * result = NULL;
 	struct NetIORequest * nior;
@@ -349,9 +352,9 @@ NiceOpenDevice(STRPTR name,LONG unit,struct IORequest *ior,LONG flags)
  * commands use.
  *
  * The buffer referred to in the "sana2_byte_copy_from_buff" function name
- * is the client's buffer. Hence, this function copies from the client's
- * buffer to the network driver's buffer so that the driver may transmit the
- * data.
+ * is the client's buffer (here the client is the TFTPClient command).
+ * Hence, this function copies from the client's buffer to the network driver's
+ * buffer so that the driver may transmit the data.
  */
 static LONG ASM SAVE_DS
 sana2_byte_copy_from_buff(
@@ -393,8 +396,9 @@ sana2_byte_copy_from_buff(
  * commands use.
  *
  * The buffer referred to in the "sana2_byte_copy_to_buff" function name
- * is the client's buffer. Hence, this function copies data received
- * by the network driver to the client's buffer.
+ * is the client's buffer (here the client is the TFTPClient command).
+ * Hence, this function copies data received by the network driver to
+ * the client's buffer.
  */
 static LONG ASM SAVE_DS
 sana2_byte_copy_to_buff(
@@ -782,6 +786,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		if(!args->Quiet)
 			FPrintf(error_output, "%s: Could not create network read MsgPort.\n","TFTPClient");
 
+		D(("Could not create network read MsgPort."));
+
 		goto out;
 	}
 
@@ -791,6 +797,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		if(!args->Quiet)
 			FPrintf(error_output, "%s: Could not create network write MsgPort.\n","TFTPClient");
 
+		D(("Could not create network write MsgPort."));
+
 		goto out;
 	}
 
@@ -799,6 +807,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	{
 		if(!args->Quiet)
 			PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
+
+		D(("Could not create net control request"));
 
 		goto out;
 	}
@@ -812,17 +822,17 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	error = NiceOpenDevice(args->DeviceName,(*args->DeviceUnit),(struct IORequest *)control_request, 0);
 	if(error != OK)
 	{
-		if(!args->Quiet)
+		error_text = get_io_error_text(error);
+		if(error_text == NULL)
 		{
-			error_text = get_io_error_text(error);
-			if(error_text == NULL)
-			{
-				sprintf(other_error_text,"error=%d",error);
-				error_text = other_error_text;
-			}
-
-			FPrintf(error_output, "%s: Could not open '%s', unit %ld (%s).\n","TFTPClient", args->DeviceName,(*args->DeviceUnit), error_text);
+			sprintf(other_error_text,"error=%d",error);
+			error_text = other_error_text;
 		}
+
+		if(!args->Quiet)
+			FPrintf(error_output, "%s: Could not open '%s', unit %ld (%s).\n","TFTPClient", args->DeviceName,(*args->DeviceUnit), error_text);
+
+		D(("Could not open '%s', unit %ld (%s).", args->DeviceName,(*args->DeviceUnit),error_text));
 
 		goto out;
 	}
@@ -868,32 +878,34 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)
 	{
+		error_text = get_io_error_text(error);
+		if(error_text == NULL)
+		{
+			sprintf(other_error_text,"error=%d",error);
+			error_text = other_error_text;
+		}
+
+		if(control_request->nior_IOS2.ios2_WireError == 0)
+		{
+			wire_error_text = "no wire error";
+		}
+		else
+		{
+			wire_error_text = get_wire_error_text(control_request->nior_IOS2.ios2_WireError);
+			if(wire_error_text == NULL)
+			{
+				sprintf(other_wire_error_text,"wire error=%d",control_request->nior_IOS2.ios2_WireError);
+				wire_error_text = other_wire_error_text;
+			}
+		}
+
 		if(!args->Quiet)
 		{
-			error_text = get_io_error_text(error);
-			if(error_text == NULL)
-			{
-				sprintf(other_error_text,"error=%d",error);
-				error_text = other_error_text;
-			}
-
-			if(control_request->nior_IOS2.ios2_WireError == 0)
-			{
-				wire_error_text = "no wire error";
-			}
-			else
-			{
-				wire_error_text = get_wire_error_text(control_request->nior_IOS2.ios2_WireError);
-				if(wire_error_text == NULL)
-				{
-					sprintf(other_wire_error_text,"wire error=%d",control_request->nior_IOS2.ios2_WireError);
-					wire_error_text = other_wire_error_text;
-				}
-			}
-
 			FPrintf(error_output, "%s: Could not query '%s', unit %ld parameters (%s, %s).\n","TFTPClient",
 				args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text);
 		}
+
+		D(("Could not query '%s', unit %ld parameters (%s, %s).",args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text));
 		
 		goto out;
 	}
@@ -903,6 +915,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	{
 		if(!args->Quiet)
 			FPrintf(error_output, "%s: '%s', unit %ld does not correspond to an Ethernet device.\n","TFTPClient", args->DeviceName,(*args->DeviceUnit));
+
+		D(("'%s', unit %ld does not correspond to an Ethernet device.",args->DeviceName,(*args->DeviceUnit)));
 
 		goto out;
 	}
@@ -922,6 +936,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 				args->DeviceName,(*args->DeviceUnit));
 		}
 
+		D(("Maximum transmission unit size (%ld bytes) of '%s', unit %ld is too small.",buffer_size,args->DeviceName,(*args->DeviceUnit)));
+
 		goto out;
 	}
 
@@ -937,32 +953,34 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK)
 	{
+		error_text = get_io_error_text(error);
+		if(error_text == NULL)
+		{
+			sprintf(other_error_text,"error=%d",error);
+			error_text = other_error_text;
+		}
+
+		if(control_request->nior_IOS2.ios2_WireError == 0)
+		{
+			wire_error_text = "no wire error";
+		}
+		else
+		{
+			wire_error_text = get_wire_error_text(control_request->nior_IOS2.ios2_WireError);
+			if(wire_error_text == NULL)
+			{
+				sprintf(other_wire_error_text,"wire error=%d",control_request->nior_IOS2.ios2_WireError);
+				wire_error_text = other_wire_error_text;
+			}
+		}
+
 		if(!args->Quiet)
 		{
-			error_text = get_io_error_text(error);
-			if(error_text == NULL)
-			{
-				sprintf(other_error_text,"error=%d",error);
-				error_text = other_error_text;
-			}
-
-			if(control_request->nior_IOS2.ios2_WireError == 0)
-			{
-				wire_error_text = "no wire error";
-			}
-			else
-			{
-				wire_error_text = get_wire_error_text(control_request->nior_IOS2.ios2_WireError);
-				if(wire_error_text == NULL)
-				{
-					sprintf(other_wire_error_text,"wire error=%d",control_request->nior_IOS2.ios2_WireError);
-					wire_error_text = other_wire_error_text;
-				}
-			}
-
 			FPrintf(error_output, "%s: Could not obtain '%s', unit %ld station address (%s, %s).\n","TFTPClient",
 				args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text);
 		}
+
+		D(("Could not obtain '%s', unit %ld station address (%s, %s).",args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text));
 		
 		goto out;
 	}
@@ -985,32 +1003,34 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	error = DoIO((struct IORequest *)control_request);
 	if(error != OK && control_request->nior_IOS2.ios2_WireError != S2WERR_IS_CONFIGURED)
 	{
+		error_text = get_io_error_text(error);
+		if(error_text == NULL)
+		{
+			sprintf(other_error_text,"error=%d",error);
+			error_text = other_error_text;
+		}
+
+		if(control_request->nior_IOS2.ios2_WireError == 0)
+		{
+			wire_error_text = "no wire error";
+		}
+		else
+		{
+			wire_error_text = get_wire_error_text(control_request->nior_IOS2.ios2_WireError);
+			if(wire_error_text == NULL)
+			{
+				sprintf(other_wire_error_text,"wire error=%d",control_request->nior_IOS2.ios2_WireError);
+				wire_error_text = other_wire_error_text;
+			}
+		}
+
 		if(!args->Quiet)
 		{
-			error_text = get_io_error_text(error);
-			if(error_text == NULL)
-			{
-				sprintf(other_error_text,"error=%d",error);
-				error_text = other_error_text;
-			}
-
-			if(control_request->nior_IOS2.ios2_WireError == 0)
-			{
-				wire_error_text = "no wire error";
-			}
-			else
-			{
-				wire_error_text = get_wire_error_text(control_request->nior_IOS2.ios2_WireError);
-				if(wire_error_text == NULL)
-				{
-					sprintf(other_wire_error_text,"wire error=%d",control_request->nior_IOS2.ios2_WireError);
-					wire_error_text = other_wire_error_text;
-				}
-			}
-
 			FPrintf(error_output, "%s: Could not set '%s', unit %ld station address (%s, %s).\n","TFTPClient",
 				args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text);
 		}
+
+		D(("Could not set '%s', unit %ld station address (%s, %s).",args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text));
 		
 		goto out;
 	}
@@ -1029,6 +1049,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		if(!args->Quiet)
 			PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
 
+		D(("could not create write request"));
+
 		goto out;
 	}
 
@@ -1042,6 +1064,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		{
 			if(!args->Quiet)
 				PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
+
+			D(("could not create ARP read request"));
 
 			goto out;
 		}
@@ -1059,6 +1083,8 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		{
 			if(!args->Quiet)
 				PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
+
+			D(("could not create IP read request"));
 
 			goto out;
 		}

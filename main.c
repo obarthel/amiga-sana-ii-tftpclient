@@ -266,13 +266,13 @@ main(int argc,char ** argv)
 		args.Quiet = FALSE;
 
 	/* If no DEVICE argument was provided, try the "TFTPDEVICE" environment variable. */
-	if(!args.DeviceName)
+	if(args.DeviceName == NULL)
 	{
 		if(GetVar("TFTPDEVICE",device_name,sizeof(device_name),0) > 0)
 			args.DeviceName = device_name;
 	}
 
-	if(!args.DeviceName)
+	if(args.DeviceName == NULL)
 	{
 		if(!args.Quiet)
 			FPrintf(error_output, "%s: Required %s argument is missing.\n","TFTPClient", "DEVICENAME");
@@ -281,7 +281,7 @@ main(int argc,char ** argv)
 	}
 
 	/* If no UNIT argument was provided, try the "TFTPUNIT" environment variable. */
-	if(!args.DeviceUnit)
+	if(args.DeviceUnit == NULL)
 	{
 		TEXT value[16];
 
@@ -292,7 +292,7 @@ main(int argc,char ** argv)
 		}
 	}
 
-	if(!args.DeviceUnit)
+	if(args.DeviceUnit == NULL)
 	{
 		device_unit = 0;
 
@@ -300,13 +300,13 @@ main(int argc,char ** argv)
 	}
 
 	/* If no LOCALADDRESS argument was provided, try the "TFTPLOCALADDRESS" environment variable. */
-	if(!args.LocalIPAddress)
+	if(args.LocalIPAddress == NULL)
 	{
 		if(GetVar("TFTPLOCALADDRESS",local_ip_address,sizeof(local_ip_address),0) > 0)
 			args.LocalIPAddress = local_ip_address;
 	}
 
-	if(!args.LocalIPAddress)
+	if(args.LocalIPAddress == NULL)
 	{
 		if(!args.Quiet)
 			FPrintf(error_output, "%s: Required %s argument is missing.\n","TFTPClient", "LOCALADDRESS");
@@ -468,14 +468,14 @@ main(int argc,char ** argv)
 		source_file = Open(from_path, MODE_OLDFILE);
 		if(source_file == (BPTR)NULL)
 		{
+			TEXT error_message[256];
+
+			Fault(IoErr(),NULL,error_message,sizeof(error_message));
+
 			if(!args.Quiet)
-			{
-				TEXT error_message[256];
-
-				Fault(IoErr(),NULL,error_message,sizeof(error_message));
-
 				FPrintf(error_output, "%s: Could not open file \"%s\" for reading (%s).\n","TFTPClient",from_path,error_message);
-			}
+
+			D(("Could not open file '%s' for reading (%s).",from_path,error_message));
 
 			goto out;
 		}
@@ -505,14 +505,14 @@ main(int argc,char ** argv)
 				 */
 				if(IoErr() != ERROR_OBJECT_NOT_FOUND)
 				{
+					TEXT error_message[256];
+
+					Fault(IoErr(),NULL,error_message,sizeof(error_message));
+
 					if(!args.Quiet)
-					{
-						TEXT error_message[256];
-
-						Fault(IoErr(),NULL,error_message,sizeof(error_message));
-
 						FPrintf(error_output, "%s: Could not check if file \"%s\" exists (%s).\n","TFTPClient",to_path,error_message);
-					}
+
+					D(("Could not check if file '%s' exists (%s).",to_path,error_message));
 
 					goto out;
 				}
@@ -525,6 +525,8 @@ main(int argc,char ** argv)
 				if(!args.Quiet)
 					Printf("%s: Destination file \"%s\" already exists. Use OVERWRITE argument to replace it.\n","TFTPClient",to_path);
 
+				D(("Destination file '%s' already exists.",to_path));
+
 				result = RETURN_WARN;
 				goto out;
 			}
@@ -534,14 +536,14 @@ main(int argc,char ** argv)
 		destination_file = Open(to_path, MODE_NEWFILE);
 		if(destination_file == (BPTR)NULL)
 		{
+			TEXT error_message[256];
+
+			Fault(IoErr(),NULL,error_message,sizeof(error_message));
+
 			if(!args.Quiet)
-			{
-				TEXT error_message[256];
-
-				Fault(IoErr(),NULL,error_message,sizeof(error_message));
-
 				FPrintf(error_output, "%s: Could not open file \"%s\" for writing (%s).\n","TFTPClient",to_path,error_message);
-			}
+
+			D(("Could not open file '%s' for writing (%s)",to_path,error_message));
 
 			goto out;
 		}
@@ -571,6 +573,8 @@ main(int argc,char ** argv)
 
 		client_udp_port_number = 49152 + (rand() % 16384);
 	}
+
+	D(("client udp port number = %ld", client_udp_port_number));
 
 	if(args.Verbose)
 		Printf("Sending ARP query...\n");
@@ -659,6 +663,8 @@ main(int argc,char ** argv)
 				{
 					struct ip * ip = read_request->nior_Buffer;
 
+					SHOWMSG("received an IP datagram");
+
 					/* Verify that the IP header checksum is correct. */
 					if(read_request->nior_IOS2.ios2_DataLength >= sizeof(*ip) && in_cksum(ip,sizeof(*ip)) == 0)
 					{
@@ -669,6 +675,8 @@ main(int argc,char ** argv)
 						{
 							struct udphdr * udp = (struct udphdr *)&ip[1];
 							int checksum;
+
+							SHOWMSG("datagram contains UDP data");
 
 							/* Is the UDP datagram checksum OK, and the datagram is
 							 * intended for our use? Furthermore, are we even ready to
@@ -691,6 +699,8 @@ main(int argc,char ** argv)
 									char number[20];
 									char message_buffer[SEGSIZE+1];
 									int message_length;
+
+									SHOWMSG("TFTP opcode = TFTP_PACKET_ERROR");
 
 									error_text = get_tftp_error_text(tftp->th_code);
 									if(error_text == NULL)
@@ -719,6 +729,8 @@ main(int argc,char ** argv)
 								else if (tftp->th_opcode == TFTP_PACKET_DATA)
 								{
 									int payload_length = length - offsetof(struct tftphdr, th_data);
+
+									SHOWMSG("TFTP opcode = TFTP_PACKET_DATA");
 
 									/* Make sure that the data packet size is sane. */
 									if(payload_length > SEGSIZE)
@@ -783,10 +795,16 @@ main(int argc,char ** argv)
 												/* We received some data to keep, so do not delete the file. */
 												delete_destination_file = FALSE;
 											}
+											else
+											{
+												SHOWMSG("no data in the packet");
+											}
 
 											/* Is this the last data to be received? */
 											if(payload_length < SEGSIZE)
 											{
+												SHOWMSG("this is the last block transmitted by the server");
+
 												last_block_transmitted = TRUE;
 												num_eof_acknowledgements--;
 											}
@@ -905,6 +923,8 @@ main(int argc,char ** argv)
 								/* Server has acknowledged reception of data, or of the write request? */
 								else if (tftp->th_opcode == TFTP_PACKET_ACK)
 								{
+									SHOWMSG("TFTP opcode = TFTP_PACKET_ACK");
+
 									/* Could this be the server response to the write request? */
 									if (tftp_state == tftp_state_request_write)
 									{
@@ -1145,6 +1165,8 @@ main(int argc,char ** argv)
 						{
 							const struct icmp_header * icmp_header = (struct icmp_header *)&ip[1];
 
+							SHOWMSG("datagram contains ICMP data");
+
 							/* The ICMP header and message data checksum should be correct. */
 							if(in_cksum(&ip[1],ip->ip_len - sizeof(*ip)) == 0)
 							{
@@ -1259,12 +1281,12 @@ main(int argc,char ** argv)
 						{
 							if(args.Verbose)
 							{
-								Printf("Ignoring IP datagram (version=%ld, protocol=%ld; expected version=%ld, protocol=%ld).\n",
-									((ip->ip_v_hl >> 4) & 15), ip->ip_pr, IPVERSION, IPPROTO_UDP);
+								Printf("Ignoring IP datagram (version=%ld, protocol=%ld; expected version=%ld).\n",
+									((ip->ip_v_hl >> 4) & 15), ip->ip_pr, IPVERSION);
 							}
 
-							D(("Ignoring IP datagram (version=%ld, protocol=%ld; expected version=%ld, protocol=%ld).",
-								((ip->ip_v_hl >> 4) & 15), ip->ip_pr, IPVERSION, IPPROTO_UDP));
+							D(("Ignoring IP datagram (version=%ld, protocol=%ld; expected version=%ld).",
+								((ip->ip_v_hl >> 4) & 15), ip->ip_pr, IPVERSION));
 						}
 					}
 					else
@@ -1279,6 +1301,8 @@ main(int argc,char ** argv)
 				else if (read_request->nior_Type == ETHERTYPE_ARP)
 				{
 					const struct ARPHeaderEthernet * ahe = read_request->nior_Buffer;
+
+					SHOWMSG("received an ARP packet");
 
 					/* This should be an ARP packet for IPv4 addresses, with
 					 * matching hardware (6 bytes) and protocol (4 bytes)
@@ -1380,6 +1404,7 @@ main(int argc,char ** argv)
 				}
 
 				/* Put the read request back into circulation. */
+				D(("restarting read request 0x%08lx", read_request));
 				send_net_io_read_request(read_request,read_request->nior_Type);
 			}
 			else
@@ -1392,7 +1417,9 @@ main(int argc,char ** argv)
 		/* A timeout has elapsed? */
 		if(signals_received & time_signal_mask)
 		{
-			WaitIO((struct IORequest *)time_request);
+			if(time_in_use)
+				WaitIO((struct IORequest *)time_request);
+				
 			time_in_use = FALSE;
 
 			/* No response to the ARP request has arrived yet? */

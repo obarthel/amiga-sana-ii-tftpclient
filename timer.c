@@ -131,6 +131,8 @@ timer_setup(BPTR error_output, const struct cmd_args * args)
 		if(!args->Quiet)
 			PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
 
+		D(("could not create timer message port"));
+
 		goto out;
 	}
 
@@ -140,23 +142,25 @@ timer_setup(BPTR error_output, const struct cmd_args * args)
 		if(!args->Quiet)
 			PrintFault(ERROR_NO_FREE_STORE,"TFTPClient");
 
+		D(("could not create timer I/O request"));
+
 		goto out;
 	}
 
 	error = OpenDevice(TIMERNAME,UNIT_VBLANK,(struct IORequest *)time_request,0);
 	if(error != OK)
 	{
-		if(!args->Quiet)
+		error_text = get_io_error_text(error);
+		if(error_text == NULL)
 		{
-			error_text = get_io_error_text(error);
-			if(error_text == NULL)
-			{
-				sprintf(other_error_text,"error=%d",error);
-				error_text = other_error_text;
-			}
-
-			FPrintf(error_output,"%s: Cannot open \"%s\" unit %ld (%ls).\n","TFTPClient",TIMERNAME,UNIT_VBLANK,error_text);
+			sprintf(other_error_text,"error=%d",error);
+			error_text = other_error_text;
 		}
+
+		if(!args->Quiet)
+			FPrintf(error_output,"%s: Cannot open \"%s\" unit %ld (%ls).\n","TFTPClient",TIMERNAME,UNIT_VBLANK,error_text);
+
+		D(("Cannot open '%s' unit %ld (%ls).",TIMERNAME,UNIT_VBLANK,error_text));
 
 		goto out;
 	}
@@ -181,7 +185,10 @@ timer_cleanup(void)
 		stop_time();
 
 		if(time_request->tr_node.io_Device != NULL)
+		{
 			CloseDevice((struct IORequest *)time_request);
+			time_request->tr_node.io_Device = NULL;
+		}
 
 		DeleteIORequest((struct IORequest *)time_request);
 		time_request = NULL;

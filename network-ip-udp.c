@@ -403,6 +403,8 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 		{
 			Printf("TESTING: Dropping IP datagram.\n");
 
+			SHOWMSG("TESTING: Dropping IP datagram.");
+
 			return(0);
 		}
 		else if (0 < trash_tx && (rand() % 100) < trash_tx)
@@ -410,6 +412,8 @@ send_udp(int client_port_number,int server_port_number,const void * data,int dat
 			if(write_request->nior_IOS2.ios2_DataLength > 0)
 			{
 				Printf("TESTING: Trashing IP datagram.\n");
+
+				SHOWMSG("TESTING: Trashing IP datagram.");
 
 				ASSERT( write_request->nior_IOS2.ios2_DataLength <= write_request->nior_BufferSize );
 

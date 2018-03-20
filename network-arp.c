@@ -108,6 +108,8 @@ send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_addres
 		{
 			Printf("TESTING: Dropping ARP response.\n");
 
+			SHOWMSG("TESTING: Dropping ARP response.");
+
 			return(0);
 		}
 		else if (0 < trash_tx && (rand() % 100) < trash_tx)
@@ -115,6 +117,8 @@ send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_addres
 			if(write_request->nior_IOS2.ios2_DataLength > 0)
 			{
 				Printf("TESTING: Trashing ARP response.\n");
+
+				SHOMSG("TESTING: Trashing ARP response.");
 
 				ASSERT( write_request->nior_IOS2.ios2_DataLength <= write_request->nior_BufferSize );
 
@@ -182,6 +186,8 @@ broadcast_arp_query(ULONG target_ipv4_address)
 		{
 			Printf("TESTING: Dropping ARP query.\n");
 
+			SHOWMSG("TESTING: Dropping ARP query.");
+
 			RETURN(0);
 			return(0);
 		}
@@ -190,6 +196,8 @@ broadcast_arp_query(ULONG target_ipv4_address)
 			if(write_request->nior_IOS2.ios2_DataLength > 0)
 			{
 				Printf("TESTING: Trashing ARP query.\n");
+
+				SHOWMSG("TESTING: Trashing ARP query.");
 
 				ASSERT( write_request->nior_IOS2.ios2_DataLength <= write_request->nior_BufferSize );
 

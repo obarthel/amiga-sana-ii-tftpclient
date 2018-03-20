@@ -99,10 +99,13 @@ const char VersionTag[] = VERSTAG " TESTING";
 
 /****************************************************************************/
 
+struct Library * UtilityBase;
+
+/****************************************************************************/
+
 #if defined(__amigaos4__)
 
-struct UtilityIFace *	IUtility;
-struct Library *		UtilityBase;
+struct UtilityIFace * IUtility;
 
 #endif /* __amigaos4__ */
 
@@ -128,14 +131,14 @@ cleanup(void)
 			DropInterface((struct Interface *)IUtility);
 			IUtility = NULL;
 		}
-
-		if(UtilityBase != NULL)
-		{
-			CloseLibrary(UtilityBase);
-			UtilityBase = NULL;
-		}
 	}
 	#endif /* __amigaos4__ */
+
+	if(UtilityBase != NULL)
+	{
+		CloseLibrary(UtilityBase);
+		UtilityBase = NULL;
+	}
 
 	LEAVE();
 }
@@ -155,9 +158,14 @@ setup(BPTR error_output, const struct cmd_args * args)
 
 	atexit(cleanup);
 
+	/* We would like to use the utility.library V39 function GetUniqueID().
+	 * If it's not available, we'll use a different approach instead. So
+	 * there is no need to succeed in opening utility.library V39.
+	 */
+	UtilityBase = OpenLibrary("utility.library", 39);
+
 	#if defined(__amigaos4__)
 	{
-		UtilityBase = OpenLibrary("utility.library",37);
 		if(UtilityBase != NULL)
 		{
 			IUtility = (struct UtilityIFace *)GetInterface(UtilityBase, "main", 1, 0);
@@ -543,7 +551,7 @@ main(int argc,char ** argv)
 			if(!args.Quiet)
 				FPrintf(error_output, "%s: Could not open file \"%s\" for writing (%s).\n","TFTPClient",to_path,error_message);
 
-			D(("Could not open file '%s' for writing (%s)",to_path,error_message));
+			D(("Could not open file '%s' for writing (%s).",to_path,error_message));
 
 			goto out;
 		}
@@ -579,7 +587,7 @@ main(int argc,char ** argv)
 	if(args.Verbose)
 		Printf("Sending ARP query...\n");
 
-	SHOWMSG("Sending ARP query");
+	SHOWMSG("Sending ARP query.");
 
 	/* We need to know the Ethernet address corresponding to the IPv4
 	 * address of the remote TFTP server.
@@ -636,6 +644,8 @@ main(int argc,char ** argv)
 					{
 						Printf("TESTING: Dropping received %s packet.\n", type);
 
+						D(("TESTING: Dropping received %s packet.", type));
+
 						send_net_io_read_request(read_request,read_request->nior_Type);
 						read_request = NULL;
 					}
@@ -644,6 +654,8 @@ main(int argc,char ** argv)
 						if(read_request->nior_IOS2.ios2_DataLength > 0)
 						{
 							Printf("TESTING: Trashing received %s packet.\n", type);
+
+							D(("TESTING: Trashing received %s packet.", type));
 
 							ASSERT( read_request->nior_IOS2.ios2_DataLength <= read_request->nior_BufferSize );
 

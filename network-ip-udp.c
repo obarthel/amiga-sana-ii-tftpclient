@@ -453,7 +453,7 @@ verify_udp_datagram_checksum(struct ip * ip)
 		struct ip ip_copy;
 
 		/* We will clobber the IP header for the calculation,
-		 * so let's save it first.
+		 * so let's save it first (structure copy).
 		 */
 		ip_copy = (*ip);
 
@@ -464,7 +464,7 @@ verify_udp_datagram_checksum(struct ip * ip)
 
 		checksum = in_cksum(ip,sizeof(*ip) + udp_pseudo_header->uh_ulen);
 
-		/* Restore the damage. */
+		/* Restore the damage (structure copy). */
 		(*ip) = ip_copy;
 	}
 	/* Otherwise accept it as is. */

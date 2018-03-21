@@ -206,9 +206,14 @@ inet_aton(const char *cp, unsigned long * addr)
 		if (*cp == '0')
 		{
 			if (*++cp == 'x' || *cp == 'X')
-				base = 16, cp++;
+			{
+				base = 16;
+				cp++;
+			}
 			else
+			{
 				base = 8;
+			}
 		}
 
 		while ((c = *cp) != '\0')
@@ -241,7 +246,8 @@ inet_aton(const char *cp, unsigned long * addr)
 			if (pp >= parts + 3 || val > 0xff)
 				return (0);
 
-			*pp++ = val, cp++;
+			*pp++ = val;
+			cp++;
 		}
 		else
 		{

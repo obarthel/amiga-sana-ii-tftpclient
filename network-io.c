@@ -112,7 +112,7 @@ send_net_io_read_request(struct NetIORequest * nior,UWORD type)
 	ASSERT( nior->nior_IOS2.ios2_Req.io_Message.mn_ReplyPort != NULL );
 	ASSERT( NOT nior->nior_InUse );
 	ASSERT( nior->nior_Link.mln_Succ != NULL && nior->nior_Link.mln_Pred != NULL );
-	
+
 	nior->nior_Type						= type;
 	nior->nior_IOS2.ios2_PacketType		= nior->nior_Type;
 	nior->nior_IOS2.ios2_Req.io_Command	= CMD_READ;
@@ -229,7 +229,7 @@ delete_net_request(struct NetIORequest * nior)
 }
 
 /* Make a copy of a network I/O request, substituting the reply port if needed,
- * and allocating a new data buffer if desired.
+ * and always allocating a new data buffer.
  */
 static struct NetIORequest *
 duplicate_net_request(
@@ -289,6 +289,8 @@ create_net_request(struct MsgPort * reply_port)
 	struct NetIORequest * result = NULL;
 	struct NetIORequest * nior;
 
+	ASSERT( reply_port != NULL );
+
 	nior = (struct NetIORequest *)AllocVec(sizeof(*nior), MEMF_ANY|MEMF_PUBLIC|MEMF_CLEAR);
 	if(nior == NULL)
 		goto out;
@@ -324,7 +326,19 @@ NiceOpenDevice(STRPTR name,LONG unit,struct IORequest *ior,LONG flags)
 {
 	LONG error;
 
+	ASSERT( name != NULL && ior != NULL );
+
+	/* Try to open the device driver by the name given. This
+	 * should work both for device drivers located in the
+	 * current directory as well as for those already in
+	 * memory.
+	 */
 	error = OpenDevice(name,unit,ior,flags);
+
+	/* If the driver could not be opened, and the driver name
+	 * lacks a path specifier, try again by prepending "DEVS:Networks/"
+	 * to the driver name.
+	 */
 	if(error == IOERR_OPENFAIL && FilePart(name) == name)
 	{
 		const char prefix[] = "Networks/";
@@ -566,6 +580,7 @@ network_cleanup(void)
 				}
 			}
 
+			/* This renders the copying functions useless. */
 			nior->nior_BufferSize = 0;
 		}
 
@@ -642,7 +657,7 @@ sana2_hook_function(
 	LONG result;
 
 	ENTER();
-	
+
 	ASSERT( sana2req != NULL );
 	ASSERT( schm != NULL );
 
@@ -681,7 +696,7 @@ sana2_hook_function(
 			break;
 
 		default:
-		
+
 			D(("unsupported method %ld (0x%08lx)", schm->schm_Method, schm->schm_Method));
 
 			result = 0;
@@ -701,6 +716,9 @@ sana2_hook_function(
 int
 network_setup(BPTR error_output, const struct cmd_args * args)
 {
+	/* This list is submitted to the network driver at
+	 * OpenDevice() time.
+	 */
 	static struct TagItem buffer_management[] =
 	{
 		{ S2_CopyFromBuff,		(ULONG)sana2_byte_copy_from_buff },
@@ -711,6 +729,7 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		{ TAG_END, 0 }
 	};
 
+	/* This list is used by the S2_SANA2HOOK command. */
 	static Tag hook_capabilities[] =
 	{
 		S2_CopyToBuff,
@@ -843,6 +862,11 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 	 * used. The network driver should have refused to open if it
 	 * did not support the "traditional" SANA-II buffer management
 	 * functions.
+	 *
+	 * The S2_SANA2HOOK command was introduced because the buffer
+	 * management functions provided at OpenDevice() time may require
+	 * that the network driver uses 68k emulation to invoke them,
+	 * having to check first if the functions are 68k or PPC code.
 	 */
 	sana2_hook.s2h_Hook.h_Entry	= (HOOKFUNC)sana2_hook_function;
 	sana2_hook.s2h_Methods		= hook_capabilities;
@@ -906,7 +930,7 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		}
 
 		D(("Could not query '%s', unit %ld parameters (%s, %s).",args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text));
-		
+
 		goto out;
 	}
 
@@ -981,7 +1005,7 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		}
 
 		D(("Could not obtain '%s', unit %ld station address (%s, %s).",args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text));
-		
+
 		goto out;
 	}
 
@@ -1031,7 +1055,7 @@ network_setup(BPTR error_output, const struct cmd_args * args)
 		}
 
 		D(("Could not set '%s', unit %ld station address (%s, %s).",args->DeviceName,(*args->DeviceUnit), error_text, wire_error_text));
-		
+
 		goto out;
 	}
 

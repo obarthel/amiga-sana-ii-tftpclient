@@ -118,7 +118,7 @@ send_arp_response(ULONG target_ipv4_address,const UBYTE * target_ethernet_addres
 			{
 				Printf("TESTING: Trashing ARP response.\n");
 
-				SHOMSG("TESTING: Trashing ARP response.");
+				SHOWMSG("TESTING: Trashing ARP response.");
 
 				ASSERT( write_request->nior_IOS2.ios2_DataLength <= write_request->nior_BufferSize );
 

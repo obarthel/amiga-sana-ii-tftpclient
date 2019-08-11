@@ -12,6 +12,14 @@ downloading log data. Because TFTP is such a simple protocol, it is often
 easier to implement for small computer systems than the more complex
 FTP, HTTP or SSH protocols which need a complete TCP/IP stack to work.
 
+The source code of this program also serves as a complete self-contained,
+documented example of how one might write SANA-II client code in 'C'. This
+subject is somewhat "exotic", and there exist only very few examples which
+put all the parts together and show how they work. To the best of my knowledge
+the majority of such code examples were published in the mid/late 1990'ies
+and omit functionality which was added in later revisions of the SANA-II
+standard.
+
 
 ## 2. Preparations
 
